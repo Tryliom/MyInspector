@@ -1,0 +1,10 @@
+{
+  "name": "com.tryliom.my-inspector",
+  "displayName": "MyInspector",
+  "version": "1.0.0",
+  "unity": "6000.0",
+  "description": "Custom inspector attributes and drawers (NaughtyAttributes-based): meta, drawer, validator and special-case attributes.",
+  "author": {
+    "name": "Tryliom"
+  }
+}
