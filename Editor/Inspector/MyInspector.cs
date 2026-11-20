@@ -654,6 +654,39 @@ namespace MyInspector.Editor
             EditorGUIUtility.labelWidth = previousLabelWidth;
         }
 
+        private static void HandleGroupContextClick(Rect headerRect, List<Item> run)
+        {
+            if (Event.current.type != EventType.ContextClick || !headerRect.Contains(Event.current.mousePosition))
+            {
+                return;
+            }
+
+            GenericMenu menu = null;
+
+            // The menu is only built on right-click, so drawing costs nothing
+            foreach (var item in run)
+            {
+                var property = item.Property;
+
+                if (property == null || item.Method != null || property.propertyType != SerializedPropertyType.Generic
+                    || property.isArray || PropertyUtility.GetAttribute<InlinePropertyAttribute>(property) == null)
+                {
+                    continue;
+                }
+
+                menu ??= new GenericMenu();
+                MyListDrawer.AddInlineCopyPaste(menu, property);
+            }
+
+            if (menu == null)
+            {
+                return;
+            }
+
+            menu.ShowAsContext();
+            Event.current.Use();
+        }
+
         private void DrawFoldoutOrBox(List<Item> run, int depth, string key)
         {
             var isFoldout = key.StartsWith("f:", StringComparison.Ordinal);
@@ -697,6 +730,7 @@ namespace MyInspector.Editor
                     var rect = clean ? EditorGUILayout.GetControlRect() : GetBoxHeaderRect();
                     var content = new GUIContent(boolTitle.Title ?? first.displayName, first.tooltip);
 
+                    HandleGroupContextClick(rect, run);
                     _foldouts[name].Value = EditorGUI.Foldout(new Rect(rect.x, rect.y, 5f, rect.height), _foldouts[name].Value, GUIContent.none, true);
 
                     var titleStyle = GetBoolTitleStyle();
@@ -748,6 +782,7 @@ namespace MyInspector.Editor
                 if (clean)
                 {
                     _foldouts[name].Value = EditorGUILayout.Foldout(_foldouts[name].Value, displayName, true);
+                    HandleGroupContextClick(GUILayoutUtility.GetLastRect(), run);
 
                     if (_foldouts[name].Value)
                     {
@@ -763,6 +798,7 @@ namespace MyInspector.Editor
                 var headerRect = GetBoxHeaderRect();
 
                 _foldouts[name].Value = EditorGUI.Foldout(headerRect, _foldouts[name].Value, displayName, true);
+                HandleGroupContextClick(headerRect, run);
 
                 if (_foldouts[name].Value)
                 {

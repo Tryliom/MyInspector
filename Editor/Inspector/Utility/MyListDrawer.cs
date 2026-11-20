@@ -1603,6 +1603,37 @@ namespace MyInspector.Editor
             PropertyUtility.ForceVisible = previous;
         }
 
+        private static void HandleInlineContextClick(Rect headerRect, List<SerializedProperty> body)
+        {
+            if (Event.current.type != EventType.ContextClick || !headerRect.Contains(Event.current.mousePosition))
+            {
+                return;
+            }
+
+            GenericMenu menu = null;
+
+            for (var i = 0; i < body.Count; i++)
+            {
+                var child = body[i];
+
+                if (child.propertyType != SerializedPropertyType.Generic || child.isArray || PropertyUtility.GetAttribute<InlinePropertyAttribute>(child) == null)
+                {
+                    continue;
+                }
+
+                menu ??= new GenericMenu();
+                AddInlineCopyPaste(menu, child);
+            }
+
+            if (menu == null)
+            {
+                return;
+            }
+
+            menu.ShowAsContext();
+            Event.current.Use();
+        }
+
         private static void DrawFoldoutRun(Rect rect, SerializedProperty property, FoldoutAttribute foldout, List<SerializedProperty> children, ref float y)
         {
             var key = GetFoldoutKey(property, foldout.Name);
@@ -1614,6 +1645,7 @@ namespace MyInspector.Editor
             {
                 var line = new Rect(rect.x, y, rect.width, EditorGUIUtility.singleLineHeight);
 
+                HandleInlineContextClick(line, body);
                 open = DrawFoldoutHeader(line, open, foldout, toggle, false);
                 SessionState.SetBool(key, open);
                 y += line.height + EditorGUIUtility.standardVerticalSpacing;
@@ -1639,6 +1671,7 @@ namespace MyInspector.Editor
 
             var foldoutRect = new Rect(header.x + 18f, header.y + (BoxHeaderHeight - EditorGUIUtility.singleLineHeight) * 0.5f, header.width - 18f, EditorGUIUtility.singleLineHeight);
 
+            HandleInlineContextClick(header, body);
             open = DrawFoldoutHeader(foldoutRect, open, foldout, toggle, true);
             SessionState.SetBool(key, open);
             y += BoxHeaderHeight;
@@ -2319,6 +2352,51 @@ namespace MyInspector.Editor
                 }
             }
         }
+
+        // Adds "Copy <field>" / "Paste <field>" entries for an inline property; the snapshot is only taken when clicked
+        public static void AddInlineCopyPaste(GenericMenu menu, SerializedProperty property)
+        {
+            var serializedObject = property.serializedObject;
+            var path = property.propertyPath;
+            var label = property.displayName;
+            var key = "inline:" + property.type;
+
+            menu.AddItem(new GUIContent("Copy " + label), false, () =>
+            {
+                var target = serializedObject.FindProperty(path);
+
+                if (target == null)
+                {
+                    return;
+                }
+
+                _clipboard = Snapshot(target);
+                _clipboardKey = key;
+            });
+
+            if (_clipboardKey == key && _clipboard is PropertySnapshot snapshot)
+            {
+                menu.AddItem(new GUIContent("Paste " + label), false, () =>
+                {
+                    serializedObject.Update();
+
+                    var target = serializedObject.FindProperty(path);
+
+                    if (target == null)
+                    {
+                        return;
+                    }
+
+                    ApplySnapshot(target, snapshot);
+                    serializedObject.ApplyModifiedProperties();
+                });
+            }
+            else
+            {
+                menu.AddDisabledItem(new GUIContent("Paste " + label));
+            }
+        }
+
 
         private static void PasteValue(SerializedProperty element, object value)
         {
