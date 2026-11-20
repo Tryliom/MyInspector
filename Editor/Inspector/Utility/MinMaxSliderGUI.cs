@@ -25,26 +25,37 @@ namespace MyInspector.Editor
             var maxRect = new Rect(rect.xMax - FieldWidth, rect.y, FieldWidth, rect.height);
             var sliderRect = new Rect(minRect.xMax + Spacing, rect.y, Mathf.Max(0f, maxRect.x - minRect.xMax - Spacing * 2f), rect.height);
 
-            var low = Snap(min, limitMin, limitMax, step, isInt);
-            var high = Snap(max, limitMin, limitMax, step, isInt);
+            var low = Clamp(min, limitMin, limitMax, isInt);
+            var high = Clamp(max, limitMin, limitMax, isInt);
 
             EditorGUI.BeginChangeCheck();
 
             low = DrawNumber(minRect, low, isInt);
             high = DrawNumber(maxRect, high, isInt);
-            if (sliderRect.width >= 40f)
-            {
-                EditorGUI.MinMaxSlider(sliderRect, ref low, ref high, limitMin, limitMax);
-            }
 
             var changed = EditorGUI.EndChangeCheck();
+
+            // Typed values are kept as is (only clamped); the step applies to the slider only
+            low = Clamp(low, limitMin, limitMax, isInt);
+            high = Clamp(high, limitMin, limitMax, isInt);
+
+            if (sliderRect.width >= 40f)
+            {
+                EditorGUI.BeginChangeCheck();
+                EditorGUI.MinMaxSlider(sliderRect, ref low, ref high, limitMin, limitMax);
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    changed = true;
+                    low = Snap(low, limitMin, limitMax, step, isInt);
+                    high = Snap(high, limitMin, limitMax, step, isInt);
+                }
+            }
 
             EditorGUI.indentLevel = indent;
 
             if (changed)
             {
-                low = Snap(low, limitMin, limitMax, step, isInt);
-                high = Snap(high, limitMin, limitMax, step, isInt);
 
                 if (low > high)
                 {
@@ -75,6 +86,13 @@ namespace MyInspector.Editor
                 value = limitMin + Mathf.Round((value - limitMin) / step) * step;
             }
 
+            value = Mathf.Clamp(value, limitMin, limitMax);
+
+            return isInt ? Mathf.Round(value) : value;
+        }
+
+        public static float Clamp(float value, float limitMin, float limitMax, bool isInt)
+        {
             value = Mathf.Clamp(value, limitMin, limitMax);
 
             return isInt ? Mathf.Round(value) : value;

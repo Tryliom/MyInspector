@@ -74,15 +74,21 @@ public class NumberConditionRangeDrawer : PropertyDrawer
 			return MinMaxSliderGUI.Snap(v, settings.Min, settings.Max, step, isInt);
 		}
 
+		float Clamp(float v)
+		{
+			return MinMaxSliderGUI.Clamp(v, settings.Min, settings.Max, isInt);
+		}
+
 		EditorGUI.BeginChangeCheck();
 
 		var value = valueProp.floatValue;
 		var maxValue = maxProp.floatValue;
 
+		// Only clamped: values typed between two steps must stay as typed
 		if (hasLimits)
 		{
-			value = Snap(value);
-			maxValue = Snap(maxValue);
+			value = Clamp(value);
+			maxValue = Clamp(maxValue);
 		}
 
 		if (condition == RangeCondition.Between)
@@ -108,8 +114,16 @@ public class NumberConditionRangeDrawer : PropertyDrawer
 			var fieldRect = new Rect(rest.xMax - FieldWidth, rest.y, FieldWidth, rest.height);
 			var sliderRect = new Rect(rest.x, rest.y, fieldRect.x - rest.x - Spacing, rest.height);
 
-			value = Snap(GUI.HorizontalSlider(sliderRect, value, settings.Min, settings.Max));
-			value = Snap(DrawNumber(fieldRect, value, isInt));
+			EditorGUI.BeginChangeCheck();
+
+			var slid = GUI.HorizontalSlider(sliderRect, value, settings.Min, settings.Max);
+
+			if (EditorGUI.EndChangeCheck())
+			{
+				value = Snap(slid);
+			}
+
+			value = Clamp(DrawNumber(fieldRect, value, isInt));
 		}
 		else
 		{
@@ -118,8 +132,8 @@ public class NumberConditionRangeDrawer : PropertyDrawer
 
 		if (EditorGUI.EndChangeCheck())
 		{
-			valueProp.floatValue = hasLimits ? Snap(value) : value;
-			maxProp.floatValue = hasLimits ? Snap(maxValue) : maxValue;
+			valueProp.floatValue = hasLimits ? Clamp(value) : value;
+			maxProp.floatValue = hasLimits ? Clamp(maxValue) : maxValue;
 		}
 		else if (!Mathf.Approximately(valueProp.floatValue, value) || !Mathf.Approximately(maxProp.floatValue, maxValue))
 		{
