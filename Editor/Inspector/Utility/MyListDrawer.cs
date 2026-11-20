@@ -68,7 +68,7 @@ namespace MyInspector.Editor
 
             if (!property.isExpanded)
             {
-                return height + TopPadding;
+                return height + BottomPadding + TopPadding;
             }
 
             var keys = property.FindPropertyRelative("keyData");
@@ -651,14 +651,6 @@ namespace MyInspector.Editor
                     EditorGUI.DrawRect(rowRect, idx % 2 == 0 ? EvenRowColor : OddRowColor);
                 }
 
-                if (Event.current.type == EventType.ContextClick && rowRect.Contains(Event.current.mousePosition))
-                {
-                    ShowDictionaryContextMenu(property, i);
-                    Event.current.Use();
-
-                    return;
-                }
-
                 if (cull && (rowRect.yMax < visible.yMin || rowRect.yMin > visible.yMax))
                 {
                     y += height + Spacing + ItemPadding * 2f;
@@ -672,6 +664,15 @@ namespace MyInspector.Editor
                 EditorGUI.PropertyField(keyRect, keys.GetArrayElementAtIndex(i), GUIContent.none, true);
                 DrawDictionaryValue(valueRect, values.GetArrayElementAtIndex(i));
                 EditorGUIUtility.labelWidth = labelWidth;
+
+                // Handled after the content so the innermost row consumes the click first
+                if (Event.current.type == EventType.ContextClick && rowRect.Contains(Event.current.mousePosition))
+                {
+                    ShowDictionaryContextMenu(property, i);
+                    Event.current.Use();
+
+                    return;
+                }
 
                 if (GUI.Button(removeRect, "x", RemoveStyle))
                 {
@@ -868,6 +869,11 @@ namespace MyInspector.Editor
 
             var settings = GetSettings(property);
             var height = GetListBodyHeight(property, settings);
+
+            if (!plain && (!IsExpanded(property, settings) || property.arraySize == 0))
+            {
+                height += BottomPadding;
+            }
 
             return plain ? height : height + TopPadding;
         }
@@ -1177,10 +1183,10 @@ namespace MyInspector.Editor
 
             if (!property.isExpanded)
             {
-                return headerHeight;
+                return headerHeight + BottomPadding;
             }
 
-            return headerHeight + BoxPadding * 2f + GetRunsHeight(property);
+            return headerHeight + BoxPadding * 2f + GetRunsHeight(property) + BottomPadding;
         }
 
         private static float GetRunsHeight(SerializedProperty property)
@@ -1220,14 +1226,14 @@ namespace MyInspector.Editor
                 return height;
             }
 
-            height += BoxHeaderHeight;
+            height += FoldoutTopSpace + BoxHeaderHeight;
 
             if (IsFoldoutOpen(property, foldout.Name))
             {
                 height += BoxPadding * 2f + GetBodyHeight(toggle, body) + GetButtonsHeight(property, foldout);
             }
 
-            height += BoxPadding;
+            height += FoldoutBottomSpace;
 
             return height;
         }
@@ -1297,6 +1303,8 @@ namespace MyInspector.Editor
 
         private const float BoxHeaderHeight = HeaderHeight + HeaderPadding * 2f;
         private const float BoxPadding = InspectorStyle.ListBoxPadding;
+        private const float FoldoutTopSpace = InspectorStyle.FoldoutTopSpace;
+        private const float FoldoutBottomSpace = InspectorStyle.FoldoutBottomSpace;
         private const float ContainerIndent = InspectorStyle.ListContainerIndent;
         private const float BodyIndentLeft = InspectorStyle.FoldoutBodyIndentLeft;
         private const float BodyIndentRight = InspectorStyle.FoldoutBodyIndentRight;
@@ -1381,10 +1389,37 @@ namespace MyInspector.Editor
 
             foreach (var child in children)
             {
-                height += GetHeight(child) + EditorGUIUtility.standardVerticalSpacing;
+                height += GetTitleHeight(child) + GetHeight(child) + EditorGUIUtility.standardVerticalSpacing;
             }
 
             return height;
+        }
+
+        // Leaf fields get their Title from the PropertyField decorator; custom-drawn ones bypass it, so it is drawn here
+        private static TitleAttribute GetCustomTitle(SerializedProperty child)
+        {
+            return IsLeaf(child) ? null : PropertyUtility.GetAttribute<TitleAttribute>(child);
+        }
+
+        private static float GetTitleHeight(SerializedProperty child)
+        {
+            if (GetCustomTitle(child) == null)
+            {
+                return 0f;
+            }
+
+            return EditorGUIUtility.singleLineHeight + InspectorStyle.TitlePadding * 2f + InspectorStyle.TitleLineHeight + InspectorStyle.TitleBottomMargin;
+        }
+
+        private static void DrawTitle(Rect rect, string title, float y)
+        {
+            var labelRect = new Rect(rect.x, y + InspectorStyle.TitlePadding, rect.width, EditorGUIUtility.singleLineHeight);
+
+            EditorGUI.LabelField(labelRect, title, EditorStyles.boldLabel);
+
+            var lineRect = new Rect(rect.x, labelRect.yMax + 1f, rect.width, InspectorStyle.TitleLineHeight);
+
+            EditorGUI.DrawRect(lineRect, InspectorStyle.TitleLine);
         }
 
         private static List<(FoldoutAttribute Foldout, List<SerializedProperty> Children)> GetRuns(SerializedProperty property)
@@ -1444,6 +1479,13 @@ namespace MyInspector.Editor
             foreach (var child in children)
             {
                 var height = GetHeight(child);
+                var title = GetCustomTitle(child);
+
+                if (title != null)
+                {
+                    DrawTitle(rect, title.Title, y);
+                    y += GetTitleHeight(child);
+                }
 
                 _labelWidthOverride = widest;
                 Field(new Rect(rect.x, y, rect.width, height), child);
@@ -1587,6 +1629,8 @@ namespace MyInspector.Editor
                 return;
             }
 
+            y += FoldoutTopSpace;
+
             var header = new Rect(rect.x, y, rect.width, BoxHeaderHeight);
             var headerColor = InspectorStyle.HeaderBackground;
             var contentColor = InspectorStyle.ContentBackground;
@@ -1613,7 +1657,7 @@ namespace MyInspector.Editor
             }
 
             DrawBorder(new Rect(rect.x, header.y, rect.width, y - header.y));
-            y += BoxPadding;
+            y += FoldoutBottomSpace;
         }
 
         private static void DrawContainer(Rect rect, SerializedProperty property, GUIContent label, bool flat, bool plain)
@@ -1811,14 +1855,6 @@ namespace MyInspector.Editor
 
                 EditorGUIUtility.AddCursorRect(handleRect, MouseCursor.Pan);
 
-                if (Event.current.type == EventType.ContextClick && rowRect.Contains(Event.current.mousePosition))
-                {
-                    ShowContextMenu(property, i);
-                    Event.current.Use();
-
-                    return;
-                }
-
                 if (IsNullReference(element))
                 {
                     var elementPath = element.propertyPath;
@@ -1840,6 +1876,15 @@ namespace MyInspector.Editor
                     var elementLabel = showIndex ? new GUIContent(i.ToString()) : (element.displayName.StartsWith("Element ") ? GUIContent.none : new GUIContent(element.displayName));
 
                     Field(fieldRect, element, elementLabel, flat, true);
+                }
+
+                // Handled after the content so the innermost row consumes the click first
+                if (Event.current.type == EventType.ContextClick && rowRect.Contains(Event.current.mousePosition))
+                {
+                    ShowContextMenu(property, i);
+                    Event.current.Use();
+
+                    return;
                 }
 
                 if (GUI.Button(removeRect, "x", RemoveStyle))
@@ -2181,10 +2226,98 @@ namespace MyInspector.Editor
 
             if (element.propertyType == SerializedPropertyType.Generic)
             {
-                return element.boxedValue == null ? null : Clone(element.boxedValue);
+                return Snapshot(element);
             }
 
             return element.boxedValue;
+        }
+
+        private sealed class ListClipboard
+        {
+            public int Size;
+            public PropertySnapshot Snapshot;
+        }
+
+        private sealed class PropertySnapshot
+        {
+            public readonly List<string> Paths = new List<string>();
+            public readonly List<SerializedPropertyType> Types = new List<SerializedPropertyType>();
+            public readonly List<object> Values = new List<object>();
+        }
+
+        // Reads every nested serialized field one by one, so no field is lost by a whole-object boxedValue copy
+        private static PropertySnapshot Snapshot(SerializedProperty root)
+        {
+            var snapshot = new PropertySnapshot();
+            var iterator = root.Copy();
+            var end = root.GetEndProperty();
+            var prefix = root.propertyPath + ".";
+            var enterChildren = true;
+
+            while (iterator.Next(enterChildren) && !SerializedProperty.EqualContents(iterator, end))
+            {
+                enterChildren = true;
+
+                var relative = iterator.propertyPath.StartsWith(prefix) ? iterator.propertyPath.Substring(prefix.Length) : iterator.propertyPath;
+
+                if (iterator.isArray && iterator.propertyType == SerializedPropertyType.Generic)
+                {
+                    snapshot.Paths.Add(relative);
+                    snapshot.Types.Add(SerializedPropertyType.ArraySize);
+                    snapshot.Values.Add(iterator.arraySize);
+
+                    continue;
+                }
+
+                if (iterator.propertyType == SerializedPropertyType.ArraySize || iterator.propertyType == SerializedPropertyType.Generic)
+                {
+                    continue;
+                }
+
+                if (iterator.propertyType == SerializedPropertyType.ManagedReference)
+                {
+                    snapshot.Paths.Add(relative);
+                    snapshot.Types.Add(iterator.propertyType);
+                    snapshot.Values.Add(iterator.managedReferenceValue == null ? null : Clone(iterator.managedReferenceValue));
+                    enterChildren = false;
+
+                    continue;
+                }
+
+                snapshot.Paths.Add(relative);
+                snapshot.Types.Add(iterator.propertyType);
+                snapshot.Values.Add(iterator.boxedValue);
+            }
+
+            return snapshot;
+        }
+
+        private static void ApplySnapshot(SerializedProperty target, PropertySnapshot snapshot)
+        {
+            for (var i = 0; i < snapshot.Paths.Count; i++)
+            {
+                var property = target.FindPropertyRelative(snapshot.Paths[i]);
+
+                if (property == null)
+                {
+                    continue;
+                }
+
+                var value = snapshot.Values[i];
+
+                if (snapshot.Types[i] == SerializedPropertyType.ArraySize)
+                {
+                    property.arraySize = (int)value;
+                }
+                else if (snapshot.Types[i] == SerializedPropertyType.ManagedReference)
+                {
+                    property.managedReferenceValue = value == null ? null : Clone(value);
+                }
+                else if (value != null)
+                {
+                    property.boxedValue = value;
+                }
+            }
         }
 
         private static void PasteValue(SerializedProperty element, object value)
@@ -2195,7 +2328,10 @@ namespace MyInspector.Editor
             }
             else if (element.propertyType == SerializedPropertyType.Generic)
             {
-                element.boxedValue = value == null ? null : Clone(value);
+                if (value is PropertySnapshot snapshot)
+                {
+                    ApplySnapshot(element, snapshot);
+                }
             }
             else
             {
@@ -2240,13 +2376,40 @@ namespace MyInspector.Editor
 
                 menu.AddSeparator(string.Empty);
             }
-            else if (canPaste)
+            else
             {
-                menu.AddItem(new GUIContent("Paste as new element"), false, () => Apply(list =>
+                var listKey = "list:" + key;
+                var listSize = property.arraySize;
+                var listCopied = Snapshot(property);
+
+                menu.AddItem(new GUIContent("Copy list"), false, () =>
                 {
-                    list.arraySize++;
-                    PasteValue(list.GetArrayElementAtIndex(list.arraySize - 1), _clipboard);
-                }));
+                    _clipboard = new ListClipboard { Size = listSize, Snapshot = listCopied };
+                    _clipboardKey = listKey;
+                });
+
+                if (_clipboardKey == listKey && _clipboard is ListClipboard clipboardList)
+                {
+                    menu.AddItem(new GUIContent("Paste list"), false, () => Apply(list =>
+                    {
+                        list.arraySize = clipboardList.Size;
+                        ApplySnapshot(list, clipboardList.Snapshot);
+                    }));
+                }
+                else
+                {
+                    menu.AddDisabledItem(new GUIContent("Paste list"));
+                }
+
+                if (canPaste)
+                {
+                    menu.AddItem(new GUIContent("Paste as new element"), false, () => Apply(list =>
+                    {
+                        list.arraySize++;
+                        PasteValue(list.GetArrayElementAtIndex(list.arraySize - 1), _clipboard);
+                    }));
+                }
+
                 menu.AddSeparator(string.Empty);
             }
 

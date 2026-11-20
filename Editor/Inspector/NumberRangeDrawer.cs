@@ -6,11 +6,11 @@ using UnityEngine;
 [CustomPropertyDrawer(typeof(NumberRange))]
 public class NumberRangeDrawer : PropertyDrawer
 {
-	private const float Spacing = 4f;
-	private const float TypeWidth = 50f;
-	private const float ModeWidth = 60f;
-	private const float FieldWidth = 50f;
-	private const float StepButtonWidth = 20f;
+	private const float Spacing = InspectorStyle.RangeSpacing;
+	private const float TypeWidth = InspectorStyle.RangeTypeWidth;
+	private const float ModeWidth = InspectorStyle.RangeModeWidth;
+	private const float FieldWidth = InspectorStyle.RangeFieldWidth;
+	private const float StepButtonWidth = InspectorStyle.RangeStepButtonWidth;
 
 	public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
 	{
@@ -33,7 +33,7 @@ public class NumberRangeDrawer : PropertyDrawer
 
 		EditorGUI.LabelField(labelRect, label);
 		// Unity starts the field after the label plus a 2px prefix padding
-		const float prefixPadding = 2f;
+		const float prefixPadding = InspectorStyle.RangePrefixPadding;
 
 		position = new Rect(position.x + labelWidth + prefixPadding, position.y, position.width - labelWidth - prefixPadding, position.height);
 		EditorGUI.indentLevel = 0;

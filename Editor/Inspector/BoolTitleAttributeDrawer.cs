@@ -1,15 +1,16 @@
+using MyInspector.Editor;
 using UnityEditor;
 using UnityEngine;
 
 [CustomPropertyDrawer(typeof(BoolTitleAttribute))]
 public class BoolTitleAttributeDrawer : PropertyDrawer
 {
-	private const float TopSpace = 8f;
-	private const float BottomSpace = 3f;
+	private const float TopSpace = InspectorStyle.TitleTopSpace;
+	private const float BottomSpace = InspectorStyle.TitleBottomSpace;
 
 	public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
 	{
-		return TopSpace + EditorGUIUtility.singleLineHeight + 1f + BottomSpace;
+		return TopSpace + EditorGUIUtility.singleLineHeight + InspectorStyle.TitleSeparatorThickness + BottomSpace;
 	}
 
 	public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
@@ -29,8 +30,8 @@ public class BoolTitleAttributeDrawer : PropertyDrawer
 		property.boolValue = EditorGUI.ToggleLeft(line, content, property.boolValue, EditorStyles.boldLabel);
 		EditorGUI.EndProperty();
 
-		var separator = new Rect(position.x, line.yMax, position.width, 1f);
+		var separator = new Rect(position.x, line.yMax, 		position.width, InspectorStyle.TitleSeparatorThickness);
 
-		EditorGUI.DrawRect(separator, new Color(0.5f, 0.5f, 0.5f, 0.5f));
+				EditorGUI.DrawRect(separator, InspectorStyle.TitleSeparator);
 	}
 }

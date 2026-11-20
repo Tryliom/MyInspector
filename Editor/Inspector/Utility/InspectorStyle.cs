@@ -70,6 +70,8 @@ namespace MyInspector.Editor
         public const float ListItemPadding = 3f;
         public const float ListBottomPadding = 2f;
         public const float ListBoxPadding = 3f;
+        public const float FoldoutTopSpace = ListTopPadding;
+        public const float FoldoutBottomSpace = ListBottomPadding;
         public const float ListCountWidth = 110f;
         public const float ListSearchWidth = 110f;
         public const float DictionaryMinColumnWidth = 40f;
@@ -88,5 +90,25 @@ namespace MyInspector.Editor
         public const float BrowseButtonWidth = 60f;
         public const float BoxHeaderHeight = 26f;
         public const float DisplayAsStringHorizontalMargin = 40f;
+
+        // ---- Title drawers ----
+        public const float TitleLineHeight = 1f;
+        public const float TitlePadding = 4f;
+        public const float TitleBottomMargin = 2f;
+        public const float TitleTopSpace = 8f;
+        public const float TitleBottomSpace = 3f;
+        public const float TitleRowHeight = 20f;
+        public const float TitleSeparatorThickness = 1f;
+        public static readonly Color TitleLine = HorizontalLine;
+        public static readonly Color TitleSeparator = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+
+        // ---- Number range drawers ----
+        public const float RangeTypeWidth = 50f;
+        public const float RangeModeWidth = 60f;
+        public const float RangeConditionWidth = 80f;
+        public const float RangeFieldWidth = 50f;
+        public const float RangeStepButtonWidth = 20f;
+        public const float RangeSpacing = 4f;
+        public const float RangePrefixPadding = 2f;
     }
 }

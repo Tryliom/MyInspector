@@ -6,10 +6,10 @@ using UnityEngine;
 [CustomPropertyDrawer(typeof(NumberRangeSettingsAttribute))]
 public class NumberConditionRangeDrawer : PropertyDrawer
 {
-	private const float Spacing = 4f;
-	private const float TypeWidth = 50f;
-	private const float ConditionWidth = 80f;
-	private const float FieldWidth = 50f;
+	private const float Spacing = InspectorStyle.RangeSpacing;
+	private const float TypeWidth = InspectorStyle.RangeTypeWidth;
+	private const float ConditionWidth = InspectorStyle.RangeConditionWidth;
+	private const float FieldWidth = InspectorStyle.RangeFieldWidth;
 
 	public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
 	{

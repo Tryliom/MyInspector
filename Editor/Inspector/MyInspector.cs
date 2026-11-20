@@ -690,6 +690,7 @@ namespace MyInspector.Editor
                     // The BoolTitle toggle acts as the foldout header; only the other fields are folded
                     if (!clean)
                     {
+                        GUILayout.Space(InspectorStyle.FoldoutTopSpace);
                         EditorGUILayout.BeginVertical();
                     }
 
@@ -738,7 +739,7 @@ namespace MyInspector.Editor
                     {
                         EditorGUILayout.EndVertical();
                         DrawOutline(GUILayoutUtility.GetLastRect());
-                        GUILayout.Space(3f);
+                        GUILayout.Space(InspectorStyle.FoldoutBottomSpace);
                     }
 
                     return;
@@ -756,6 +757,7 @@ namespace MyInspector.Editor
                     return;
                 }
 
+                GUILayout.Space(InspectorStyle.FoldoutTopSpace);
                 EditorGUILayout.BeginVertical();
 
                 var headerRect = GetBoxHeaderRect();
@@ -771,7 +773,7 @@ namespace MyInspector.Editor
 
                 EditorGUILayout.EndVertical();
                 DrawOutline(GUILayoutUtility.GetLastRect());
-                GUILayout.Space(3f);
+                GUILayout.Space(InspectorStyle.FoldoutBottomSpace);
             }
             else
             {
@@ -930,14 +932,22 @@ namespace MyInspector.Editor
                 GUILayout.Space(item.Space);
             }
 
-            if (!string.IsNullOrEmpty(item.Title))
-            {
-                EditorGUILayout.LabelField(item.Title, EditorStyles.boldLabel);
+            var title = item.Title;
 
-                var line = EditorGUILayout.GetControlRect(false, 1f);
+            if (string.IsNullOrEmpty(title) && property != null && item.Field != null && IsCustomDrawn(item))
+            {
+                // Custom drawn properties bypass PropertyField, so decorator drawers (Title) never run
+                title = item.Field.GetCustomAttribute<TitleAttribute>(true)?.Title;
+            }
+
+            if (!string.IsNullOrEmpty(title))
+            {
+                EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+
+                var line = EditorGUILayout.GetControlRect(false, InspectorStyle.TitleLineHeight);
 
                 EditorGUI.DrawRect(line, InspectorStyle.HorizontalLine);
-                GUILayout.Space(2f);
+                GUILayout.Space(InspectorStyle.TitleBottomMargin);
             }
 
             if (item.Method != null)
@@ -954,7 +964,7 @@ namespace MyInspector.Editor
             }
             else if (MyListDrawer.IsDictionary(property))
             {
-                var rect = EditorGUILayout.GetControlRect(false, MyListDrawer.GetHeight(property));
+                var rect = GetListRect(MyListDrawer.GetHeight(property));
 
                 MyListDrawer.Field(rect, property);
             }
@@ -985,6 +995,38 @@ namespace MyInspector.Editor
             {
                 MyEditorGUI.PropertyField_Layout(property, includeChildren: true);
             }
+        }
+
+        // GUIStyle.none has no margins, so no automatic spacing is added between lists and foldouts
+        private static Rect GetListRect(float height)
+        {
+            var rect = GUILayoutUtility.GetRect(0f, height, GUIStyle.none, GUILayout.ExpandWidth(true));
+
+            return EditorGUI.IndentedRect(rect);
+        }
+
+        private static bool IsCustomDrawn(Item item)
+        {
+            var property = item.Property;
+
+            if (MyListDrawer.IsDictionary(property))
+            {
+                return true;
+            }
+
+            if (property.isArray && property.propertyType != SerializedPropertyType.String)
+            {
+                return true;
+            }
+
+            if (property.propertyType == SerializedPropertyType.ManagedReference && property.managedReferenceValue == null)
+            {
+                return true;
+            }
+
+            return MyListDrawer.IsContainer(property)
+                && PropertyUtility.GetAttribute<InlinePropertyAttribute>(property) == null
+                && PropertyUtility.GetAttribute<HideLabelAttribute>(property) == null;
         }
 
         private static bool HasGroupedChildren(SerializedProperty property)
@@ -1025,14 +1067,14 @@ namespace MyInspector.Editor
 
         private void DrawNested(SerializedProperty property)
         {
-            GUILayout.Space(5f);
+            GUILayout.Space(InspectorStyle.ListTopPadding);
             EditorGUILayout.BeginVertical();
 
             DrawNestedBox(property);
 
             EditorGUILayout.EndVertical();
             DrawOutline(GUILayoutUtility.GetLastRect());
-            GUILayout.Space(3f);
+            GUILayout.Space(InspectorStyle.FoldoutBottomSpace);
         }
 
         private static void DrawOutline(Rect rect)
@@ -1146,7 +1188,7 @@ namespace MyInspector.Editor
 
         private void DrawList(Item item)
         {
-            var rect = EditorGUILayout.GetControlRect(false, MyListDrawer.GetHeight(item.Property));
+            var rect = GetListRect(MyListDrawer.GetHeight(item.Property));
 
             MyListDrawer.Draw(rect, item.Property);
         }

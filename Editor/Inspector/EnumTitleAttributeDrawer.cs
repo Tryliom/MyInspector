@@ -1,17 +1,18 @@
 using System;
+using MyInspector.Editor;
 using UnityEditor;
 using UnityEngine;
 
 [CustomPropertyDrawer(typeof(EnumTitleAttribute))]
 public class EnumTitleAttributeDrawer : PropertyDrawer
 {
-	private const float TopSpace = 8f;
-	private const float RowHeight = 20f;
-	private const float BottomSpace = 3f;
+	private const float TopSpace = InspectorStyle.TitleTopSpace;
+	private const float RowHeight = InspectorStyle.TitleRowHeight;
+	private const float BottomSpace = InspectorStyle.TitleBottomSpace;
 
 	public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
 	{
-		return TopSpace + RowHeight + 1f + BottomSpace;
+		return TopSpace + RowHeight + InspectorStyle.TitleSeparatorThickness + BottomSpace;
 	}
 
 	public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
@@ -40,6 +41,6 @@ public class EnumTitleAttributeDrawer : PropertyDrawer
 
 		EditorGUI.EndProperty();
 
-		EditorGUI.DrawRect(new Rect(position.x, row.yMax, position.width, 1f), new Color(0.5f, 0.5f, 0.5f, 0.5f));
+		EditorGUI.DrawRect(new Rect(position.x, row.yMax, position.width, InspectorStyle.TitleSeparatorThickness), InspectorStyle.TitleSeparator);
 	}
 }

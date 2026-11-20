@@ -1,15 +1,17 @@
+using MyInspector.Editor;
 using UnityEditor;
 using UnityEngine;
 
 [CustomPropertyDrawer(typeof(TitleAttribute))]
 public class TitleAttributeDrawer : DecoratorDrawer
 {
-	private const float LineHeight = 1f;
-	private const float Padding = 4f;
+	private const float LineHeight = InspectorStyle.TitleLineHeight;
+	private const float Padding = InspectorStyle.TitlePadding;
+	private const float BottomMargin = InspectorStyle.TitleBottomMargin;
 
 	public override float GetHeight()
 	{
-		return EditorGUIUtility.singleLineHeight + Padding * 2f + LineHeight;
+		return EditorGUIUtility.singleLineHeight + Padding * 2f + LineHeight + BottomMargin;
 	}
 
 	public override void OnGUI(Rect position)
@@ -21,6 +23,6 @@ public class TitleAttributeDrawer : DecoratorDrawer
 
 		var lineRect = EditorGUI.IndentedRect(new Rect(position.x, labelRect.yMax + 1f, position.width, LineHeight));
 
-		EditorGUI.DrawRect(lineRect, new Color(0.5f, 0.5f, 0.5f, 0.6f));
+		EditorGUI.DrawRect(lineRect, InspectorStyle.TitleLine);
 	}
 }
