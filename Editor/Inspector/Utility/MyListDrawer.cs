@@ -1428,11 +1428,7 @@ namespace MyInspector.Editor
         {
             var target = property.serializedObject.targetObject;
 
-#if UNITY_6000_4_OR_NEWER
-            return $"MyListDrawer.{EntityId.ToULong(target.GetEntityId())}.{property.propertyPath}.{name}";
-#else
-            return $"MyListDrawer.{target.GetInstanceID()}.{property.propertyPath}.{name}";
-#endif
+            return $"MyListDrawer.{target.GetType().FullName}.{property.propertyPath}.{name}";
         }
 
         private static bool IsFoldoutOpen(SerializedProperty property, string name)

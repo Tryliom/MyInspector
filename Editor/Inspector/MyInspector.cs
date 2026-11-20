@@ -664,11 +664,8 @@ namespace MyInspector.Editor
             {
                 if (!_foldouts.ContainsKey(name))
                 {
-#if UNITY_6000_4_OR_NEWER
-                    _foldouts[name] = new SavedBool($"{EntityId.ToULong(target.GetEntityId())}.{name}", false);
-#else
-                    _foldouts[name] = new SavedBool($"{target.GetInstanceID()}.{name}", false);
-#endif
+                    // Instance IDs change when a prefab is reopened, so the state is stored per type instead.
+                    _foldouts[name] = new SavedBool($"MyInspector.Foldout.{target.GetType().FullName}.{name}", false);
                 }
 
                 var first = run[0].Property;
@@ -1050,9 +1047,18 @@ namespace MyInspector.Editor
         {
             var headerRect = GetBoxHeaderRect();
 
-            property.isExpanded = EditorGUI.Foldout(headerRect, property.isExpanded, PropertyUtility.GetLabel(property), true);
+            var foldoutKey = $"MyInspector.Nested.{target.GetType().FullName}.{property.propertyPath}";
 
-            if (!property.isExpanded)
+            if (!_foldouts.TryGetValue(foldoutKey, out var saved))
+            {
+                saved = new SavedBool(foldoutKey, property.isExpanded);
+                _foldouts[foldoutKey] = saved;
+            }
+
+            saved.Value = EditorGUI.Foldout(headerRect, saved.Value, PropertyUtility.GetLabel(property), true);
+            property.isExpanded = saved.Value;
+
+            if (!saved.Value)
             {
                 return;
             }
