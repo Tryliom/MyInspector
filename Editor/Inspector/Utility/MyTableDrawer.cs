@@ -29,6 +29,7 @@ namespace MyInspector.Editor
             public string Title => string.IsNullOrEmpty(CustomLabel) ? ObjectNames.NicifyVariableName(Name) : CustomLabel;
             public int Order;
             public float Width;
+            public bool Fit;
             public bool HideLabel;
             public FieldInfo Field;
             public PropertyInfo Property;
@@ -48,6 +49,7 @@ namespace MyInspector.Editor
             public int Order;
             public int Index;
             public float Width;
+            public bool Fit;
             public float ComputedWidth;
             public bool FillRest;
             public float Preferred = -1f;
@@ -1014,6 +1016,8 @@ namespace MyInspector.Editor
                     {
                         column.Width = member.Width;
                     }
+
+                    column.Fit |= member.Fit;
                 }
             }
 
@@ -1126,6 +1130,7 @@ namespace MyInspector.Editor
                 Property = info as PropertyInfo,
                 Order = info.GetCustomAttribute<PropertyOrderAttribute>(true)?.Order ?? 0,
                 Width = info.GetCustomAttribute<TableColumnWidthAttribute>(true)?.Width ?? 0f,
+                Fit = info.GetCustomAttribute<TableColumnFitAttribute>(true) != null,
                 HideLabel = info.GetCustomAttribute<HideLabelAttribute>(true) != null,
                 ReadOnly = readOnly || info.GetCustomAttribute<ReadOnlyAttribute>(true) != null
             };
@@ -1160,6 +1165,12 @@ namespace MyInspector.Editor
 
             foreach (var column in columns)
             {
+                if (column.Fit && column.Width <= 0f)
+                {
+                    EnsurePreferred(column);
+                    column.Width = column.Preferred;
+                }
+
                 if (column.Width > 0f)
                 {
                     total += column.Width;
@@ -1281,6 +1292,12 @@ namespace MyInspector.Editor
 
             var type = member.Field?.FieldType ?? member.Property.PropertyType;
 
+            return PreferredTypeWidth(type, out flex, 0);
+        }
+
+        private static float PreferredTypeWidth(Type type, out bool flex, int depth)
+        {
+            flex = false;
             type = Nullable.GetUnderlyingType(type) ?? type;
 
             if (type == typeof(bool))
@@ -1302,7 +1319,7 @@ namespace MyInspector.Editor
                     longest = Mathf.Max(longest, EditorStyles.popup.CalcSize(new GUIContent(ObjectNames.NicifyVariableName(name))).x);
                 }
 
-                return Mathf.Max(50f, longest + 4f);
+                return Mathf.Clamp(longest + 4f, 50f, 140f);
             }
 
             flex = true;
@@ -1315,6 +1332,38 @@ namespace MyInspector.Editor
             if (type == typeof(Color))
             {
                 return 60f;
+            }
+
+            if (typeof(System.Collections.IDictionary).IsAssignableFrom(type))
+            {
+                return 320f;
+            }
+
+            // Plain serializable struct/class: size it from its own fields instead of a generic default.
+            if (depth < 2 && !HasCustomDrawer(type) && (type.IsValueType || type.IsSerializable) && !typeof(UnityEngine.Object).IsAssignableFrom(type) && !type.IsPrimitive)
+            {
+                var nested = 0f;
+                var nestedFlex = false;
+                var count = 0;
+
+                foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    if (field.IsNotSerialized || (!field.IsPublic && field.GetCustomAttribute<SerializeField>() == null))
+                    {
+                        continue;
+                    }
+
+                    nested = Mathf.Max(nested, PreferredTypeWidth(field.FieldType, out var childFlex, depth + 1));
+                    nestedFlex |= childFlex;
+                    count++;
+                }
+
+                if (count > 0)
+                {
+                    flex = nestedFlex;
+
+                    return nested;
+                }
             }
 
             return 200f;
@@ -1348,6 +1397,11 @@ namespace MyInspector.Editor
                 return false;
             }
 
+            return HasCustomDrawer(type);
+        }
+
+        private static bool HasCustomDrawer(Type type)
+        {
             if (_drawerTypes == null)
             {
                 _drawerTypes = new HashSet<Type>();

@@ -13,6 +13,12 @@ namespace MyInspector
 		public bool IsReadOnly = false;
 	}
 
+	/// <summary>Sizes the table column that contains the member to the minimum width needed to display its content properly.</summary>
+	[AttributeUsage(AttributeTargets.Field | AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+	public class TableColumnFitAttribute : MetaAttribute
+	{
+	}
+
 	/// <summary>Sets the width in pixels of the table column that contains the member. Without it the column fills the free space.</summary>
 	[AttributeUsage(AttributeTargets.Field | AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
 	public class TableColumnWidthAttribute : MetaAttribute
