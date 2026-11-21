@@ -986,6 +986,15 @@ namespace MyInspector.Editor
                 GUILayout.Space(InspectorStyle.TitleBottomMargin);
             }
 
+            if (property != null && item.Field != null && IsCustomDrawn(item))
+            {
+                // Same reason as Title: lists/containers bypass PropertyField, so InfoBox decorators never run
+                foreach (var info in item.Field.GetCustomAttributes<InfoBoxAttribute>(true))
+                {
+                    MyEditorGUI.HelpBox_Layout(ResolveText(info.Text), ToMessageType(info.Type));
+                }
+            }
+
             if (item.Method != null)
             {
                 DrawButton(item.Method);
