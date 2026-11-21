@@ -107,6 +107,12 @@ namespace MyInspector.Editor
         public const float RangeModeWidth = 60f;
         public const float RangeConditionWidth = 80f;
         public const float RangeFieldWidth = 50f;
+
+        /// <summary>Smallest width of a number field sized from its content.</summary>
+        public const float RangeFieldMinWidth = 24f;
+
+        /// <summary>Horizontal padding added to the measured text of a number field.</summary>
+        public const float RangeFieldPadding = 8f;
         public const float RangeStepButtonWidth = 20f;
         public const float RangeSpacing = 4f;
         public const float RangePrefixPadding = 2f;

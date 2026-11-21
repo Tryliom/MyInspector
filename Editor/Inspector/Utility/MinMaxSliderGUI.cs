@@ -9,6 +9,21 @@ namespace MyInspector.Editor
         private const float Spacing = InspectorStyle.MinMaxSliderSpacing;
         private const float FieldWidth = InspectorStyle.MinMaxSliderFieldWidth;
 
+        private static readonly GUIContent MeasureContent = new GUIContent();
+
+        /// <summary>Width needed to display numbers within [low, high]; a minus sign is only counted when low is negative.</summary>
+        public static float FitWidth(float low, float high, bool isInt)
+        {
+            var magnitude = Mathf.Max(Mathf.Abs(low), Mathf.Abs(high));
+            var text = isInt ? Mathf.RoundToInt(magnitude).ToString() : magnitude.ToString("0.##");
+
+            MeasureContent.text = low < 0f ? "-" + text : text;
+
+            var width = EditorStyles.numberField.CalcSize(MeasureContent).x + InspectorStyle.RangeFieldPadding;
+
+            return Mathf.Max(InspectorStyle.RangeFieldMinWidth, width);
+        }
+
         /// <summary>Draws [min field][slider][max field] in the rect and returns true when a value changed.</summary>
         public static bool Draw(Rect rect, ref float min, ref float max, float limitMin, float limitMax, float step, bool isInt)
         {
@@ -21,8 +36,9 @@ namespace MyInspector.Editor
 
             EditorGUI.indentLevel = 0;
 
-            var minRect = new Rect(rect.x, rect.y, FieldWidth, rect.height);
-            var maxRect = new Rect(rect.xMax - FieldWidth, rect.y, FieldWidth, rect.height);
+            var fieldWidth = Mathf.Min(FieldWidth, FitWidth(limitMin, limitMax, isInt));
+            var minRect = new Rect(rect.x, rect.y, fieldWidth, rect.height);
+            var maxRect = new Rect(rect.xMax - fieldWidth, rect.y, fieldWidth, rect.height);
             var sliderRect = new Rect(minRect.xMax + Spacing, rect.y, Mathf.Max(0f, maxRect.x - minRect.xMax - Spacing * 2f), rect.height);
 
             var low = Clamp(min, limitMin, limitMax, isInt);

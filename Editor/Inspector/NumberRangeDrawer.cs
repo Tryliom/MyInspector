@@ -122,8 +122,9 @@ public class NumberRangeDrawer : PropertyDrawer
 			else
 			{
 				var half = (rest.width - Spacing) * 0.5f;
-				value = DrawNumber(new Rect(rest.x, rest.y, half, rest.height), value, isInt);
-				maxValue = DrawNumber(new Rect(rest.x + half + Spacing, rest.y, half, rest.height), maxValue, isInt);
+				var fieldWidth = Mathf.Min(half, MinMaxSliderGUI.FitWidth(Mathf.Min(value, maxValue), Mathf.Max(value, maxValue), isInt));
+				value = DrawNumber(new Rect(rest.x, rest.y, fieldWidth, rest.height), value, isInt);
+				maxValue = DrawNumber(new Rect(rest.x + half + Spacing, rest.y, fieldWidth, rest.height), maxValue, isInt);
 
 				if (maxValue < value)
 				{
@@ -133,7 +134,9 @@ public class NumberRangeDrawer : PropertyDrawer
 		}
 		else if (hasLimits)
 		{
-			var fieldRect = new Rect(rest.xMax - FieldWidth, rest.y, FieldWidth, rest.height);
+			var limitWidth = MinMaxSliderGUI.FitWidth(settings.Min, settings.Max, isInt);
+			var fieldWidth = Mathf.Min(FieldWidth, limitWidth);
+			var fieldRect = new Rect(rest.xMax - fieldWidth, rest.y, fieldWidth, rest.height);
 			var sliderRect = new Rect(rest.x, rest.y, fieldRect.x - rest.x - Spacing, rest.height);
 
 			EditorGUI.BeginChangeCheck();
@@ -150,7 +153,7 @@ public class NumberRangeDrawer : PropertyDrawer
 		}
 		else
 		{
-			value = DrawNumber(rest, value, isInt);
+			value = DrawNumber(new Rect(rest.x, rest.y, Mathf.Min(rest.width, MinMaxSliderGUI.FitWidth(value, value, isInt)), rest.height), value, isInt);
 			maxValue = value;
 		}
 
