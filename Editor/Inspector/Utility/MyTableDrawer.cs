@@ -1001,7 +1001,9 @@ namespace MyInspector.Editor
                         columns[key] = column;
                     }
 
-                    if (column.Members.All(m => m.Name != member.Name))
+                    var declaring = member.Field?.DeclaringType ?? member.Property?.DeclaringType ?? member.Method.DeclaringType;
+
+                    if (column.Members.All(m => m.Name != member.Name || (m.Field?.DeclaringType ?? m.Property?.DeclaringType ?? m.Method.DeclaringType) != declaring))
                     {
                         column.Members.Add(member);
                     }
