@@ -14,8 +14,17 @@ public class NumberRangeDrawer : PropertyDrawer
 
 	public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
 	{
-		Draw(position, property, label, fieldInfo?.GetCustomAttribute<NumberRangeSettingsAttribute>());
+		if (!_settingsResolved)
+		{
+			_settings = fieldInfo?.GetCustomAttribute<NumberRangeSettingsAttribute>();
+			_settingsResolved = true;
+		}
+
+		Draw(position, property, label, _settings);
 	}
+
+	private NumberRangeSettingsAttribute _settings;
+	private bool _settingsResolved;
 
 	/// <summary>Shared with NumberConditionRangeDrawer, which owns the NumberRangeSettings attribute drawer.</summary>
 	public static void Draw(Rect position, SerializedProperty property, GUIContent label, NumberRangeSettingsAttribute settings)

@@ -723,11 +723,18 @@ namespace MyInspector.Editor
             var type = Event.current.type;
             var targetId = target != null ? target.GetHashCode() : 0;
             var dirtyCount = target != null ? EditorUtility.GetDirtyCount(target) : 0;
-            var changed = _invalidateCaches || targetId != _lastTargetId || dirtyCount != _lastDirtyCount
-                          || EditorApplication.isPlaying && type == EventType.Layout;
+            // While a control is being dragged or a text/number field is being typed in, value edits do not change the layout: defer the invalidation until release or validation
+            var dragging = (GUIUtility.hotControl != 0 || EditorGUIUtility.editingTextField) && targetId == _lastTargetId;
+            var dirtyChanged = dirtyCount != _lastDirtyCount && !dragging;
+            var changed = _invalidateCaches || targetId != _lastTargetId || dirtyChanged
+                          || EditorApplication.isPlaying && type == EventType.Layout && !dragging;
 
             _lastTargetId = targetId;
-            _lastDirtyCount = dirtyCount;
+
+            if (!dragging)
+            {
+                _lastDirtyCount = dirtyCount;
+            }
             _invalidateCaches = false;
 
             if (changed)
@@ -741,6 +748,9 @@ namespace MyInspector.Editor
                 case EventType.Repaint:
                 case EventType.MouseMove:
                 case EventType.ScrollWheel:
+                case EventType.MouseDrag:
+                case EventType.KeyUp:
+                case EventType.KeyDown:
                 case EventType.Used:
                 case EventType.Ignore:
                 case EventType.MouseEnterWindow:
