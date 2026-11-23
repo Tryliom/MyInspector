@@ -71,6 +71,10 @@ namespace MyInspector.Editor
         public const float ListBottomPadding = 2f;
         public const float ListBoxPadding = 3f;
         public const float FoldoutTopSpace = ListTopPadding;
+        // Horizontal offset of the BoolTitle checkbox from the foldout header's left edge (the arrow sits just before it)
+        public const float BoolTitleToggleOffset = 0f;
+        // Width reserved for the foldout arrow before the BoolTitle checkbox in list/container headers
+        public const float BoolTitleArrowWidth = 5f;
         public const float FoldoutBottomSpace = ListBottomPadding;
         public const float ListCountWidth = 110f;
         public const float ListSearchWidth = 110f;

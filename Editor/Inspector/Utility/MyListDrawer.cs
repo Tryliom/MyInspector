@@ -1670,7 +1670,7 @@ namespace MyInspector.Editor
 
             var boolTitle = PropertyUtility.GetAttribute<BoolTitleAttribute>(toggle);
             var content = new GUIContent(boolTitle.Title ?? toggle.displayName, toggle.tooltip);
-            var arrowWidth = 12f;
+            var arrowWidth = InspectorStyle.BoolTitleArrowWidth;
 
             open = EditorGUI.Foldout(new Rect(rect.x, rect.y, arrowWidth, rect.height), open, GUIContent.none, true);
 

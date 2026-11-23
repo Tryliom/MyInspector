@@ -736,7 +736,7 @@ namespace MyInspector.Editor
                     var titleStyle = GetBoolTitleStyle();
 
                     EditorGUI.BeginProperty(rect, content, first);
-                    first.boolValue = EditorGUI.ToggleLeft(new Rect(rect.x + 5f, rect.y, rect.width - 5f, rect.height), content, first.boolValue, titleStyle);
+                    first.boolValue = EditorGUI.ToggleLeft(new Rect(rect.x + InspectorStyle.BoolTitleToggleOffset, rect.y, rect.width - InspectorStyle.BoolTitleToggleOffset, rect.height), content, first.boolValue, titleStyle);
                     EditorGUI.EndProperty();
 
                     if (_foldouts[name].Value)
