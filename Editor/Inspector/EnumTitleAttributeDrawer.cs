@@ -24,6 +24,19 @@ public class EnumTitleAttributeDrawer : PropertyDrawer
 			return;
 		}
 
+		// Manual rects ignore the indent, so apply it once and draw with a zero indent level
+		var previousIndent = EditorGUI.indentLevel;
+
+		position = EditorGUI.IndentedRect(position);
+		EditorGUI.indentLevel = 0;
+
+		DrawTitle(position, property, label);
+
+		EditorGUI.indentLevel = previousIndent;
+	}
+
+	private void DrawTitle(Rect position, SerializedProperty property, GUIContent label)
+	{
 		var attribute = (EnumTitleAttribute) this.attribute;
 		var content = new GUIContent(attribute.Title ?? label.text, label.tooltip);
 		var row = new Rect(position.x, position.y + TopSpace, position.width, RowHeight);

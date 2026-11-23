@@ -857,6 +857,11 @@ namespace MyInspector.Editor
                 return GetDictionaryHeight(property);
             }
 
+            if (IsNullReference(property))
+            {
+                return EditorGUIUtility.singleLineHeight;
+            }
+
             if (IsContainer(property))
             {
                 return GetContainerHeight(property, flat || IsInline(property), plain);
@@ -937,6 +942,10 @@ namespace MyInspector.Editor
             {
                 Draw(rect, property);
             }
+            else if (IsNullReference(property))
+            {
+                DrawNullReferenceButton(rect, property, label);
+            }
             else if (IsContainer(property))
             {
                 DrawContainer(rect, property, label, flat || IsInline(property), plain);
@@ -967,6 +976,39 @@ namespace MyInspector.Editor
                 }
 
                 EditorGUIUtility.labelWidth = previousLabelWidth;
+            }
+        }
+
+        // A null [SerializeReference] field has no children to draw: offer a button to create the instance
+        private static void DrawNullReferenceButton(Rect rect, SerializedProperty property, GUIContent label)
+        {
+            var baseType = ResolveDeclaredType(property);
+            var buttonRect = EditorGUI.PrefixLabel(rect, label ?? new GUIContent(property.displayName));
+            var canInstantiate = baseType != null && !baseType.IsAbstract && !baseType.IsInterface && baseType.GetConstructor(Type.EmptyTypes) != null;
+
+            if (!EditorGUI.DropdownButton(buttonRect, new GUIContent(canInstantiate ? "Initialize" : "Select type..."), FocusType.Keyboard, canInstantiate ? EditorStyles.miniButton : EditorStyles.popup))
+            {
+                return;
+            }
+
+            var serializedObject = property.serializedObject;
+            var path = property.propertyPath;
+
+            void Assign(Type type)
+            {
+                serializedObject.Update();
+                serializedObject.FindProperty(path).managedReferenceValue = Activator.CreateInstance(type);
+                serializedObject.ApplyModifiedProperties();
+                ClearHeightCache();
+            }
+
+            if (canInstantiate)
+            {
+                Assign(baseType);
+            }
+            else if (baseType != null)
+            {
+                ShowTypeMenu(baseType, Assign);
             }
         }
 

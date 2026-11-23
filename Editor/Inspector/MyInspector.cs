@@ -730,7 +730,7 @@ namespace MyInspector.Editor
                     if (!clean)
                     {
                         GUILayout.Space(InspectorStyle.FoldoutTopSpace);
-                        EditorGUILayout.BeginVertical();
+                        BeginIndentedBox();
                     }
 
                     var rect = clean ? EditorGUILayout.GetControlRect() : GetBoxHeaderRect();
@@ -777,8 +777,7 @@ namespace MyInspector.Editor
 
                     if (!clean)
                     {
-                        EditorGUILayout.EndVertical();
-                        DrawOutline(GUILayoutUtility.GetLastRect());
+                        EndIndentedBox();
                         GUILayout.Space(InspectorStyle.FoldoutBottomSpace);
                     }
 
@@ -799,7 +798,7 @@ namespace MyInspector.Editor
                 }
 
                 GUILayout.Space(InspectorStyle.FoldoutTopSpace);
-                EditorGUILayout.BeginVertical();
+                BeginIndentedBox();
 
                 var headerRect = GetBoxHeaderRect();
 
@@ -813,8 +812,7 @@ namespace MyInspector.Editor
                     EditorGUILayout.EndVertical();
                 }
 
-                EditorGUILayout.EndVertical();
-                DrawOutline(GUILayoutUtility.GetLastRect());
+                EndIndentedBox();
                 GUILayout.Space(InspectorStyle.FoldoutBottomSpace);
             }
             else
@@ -1042,6 +1040,14 @@ namespace MyInspector.Editor
             {
                 DrawNested(property);
             }
+            else if ((property.propertyType == SerializedPropertyType.Generic
+                    || property.propertyType == SerializedPropertyType.ManagedReference)
+                && MyListDrawer.IsContainer(property)
+                && PropertyUtility.GetAttribute<InlinePropertyAttribute>(property) != null)
+            {
+                // PropertyField would draw the children with Unity's default layout, ignoring groups and nested containers
+                DrawInlineChildren(property);
+            }
             else
             {
                 MyEditorGUI.PropertyField_Layout(property, includeChildren: true);
@@ -1119,13 +1125,35 @@ namespace MyInspector.Editor
         private void DrawNested(SerializedProperty property)
         {
             GUILayout.Space(InspectorStyle.ListTopPadding);
-            EditorGUILayout.BeginVertical();
+            BeginIndentedBox();
 
             DrawNestedBox(property);
 
+            EndIndentedBox();
+            GUILayout.Space(InspectorStyle.FoldoutBottomSpace);
+        }
+
+        private readonly Stack<int> _boxIndents = new Stack<int>();
+
+        // Layout boxes ignore EditorGUI.indentLevel, so the indent is applied as a left space and reset inside the box
+        private void BeginIndentedBox()
+        {
+            var indent = EditorGUI.indentLevel;
+
+            _boxIndents.Push(indent);
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(indent * InspectorStyle.IndentLength);
+            EditorGUILayout.BeginVertical();
+            EditorGUI.indentLevel = 0;
+        }
+
+        private void EndIndentedBox()
+        {
             EditorGUILayout.EndVertical();
             DrawOutline(GUILayoutUtility.GetLastRect());
-            GUILayout.Space(InspectorStyle.FoldoutBottomSpace);
+            EditorGUILayout.EndHorizontal();
+            EditorGUI.indentLevel = _boxIndents.Pop();
         }
 
         private static void DrawOutline(Rect rect)
@@ -1134,6 +1162,43 @@ namespace MyInspector.Editor
             {
                 MyListDrawer.DrawOutline(rect);
             }
+        }
+
+        private void DrawInlineChildren(SerializedProperty property)
+        {
+            var items = new List<Item>();
+            var iterator = property.Copy();
+            var end = iterator.GetEndProperty();
+
+            if (iterator.NextVisible(true))
+            {
+                do
+                {
+                    if (SerializedProperty.EqualContents(iterator, end))
+                    {
+                        break;
+                    }
+
+                    items.Add(CreatePropertyItem(iterator.Copy()));
+                }
+                while (iterator.NextVisible(false));
+            }
+
+            var previousPrefix = _foldoutPrefix;
+
+            _foldoutPrefix = property.propertyPath + ".";
+
+            SortByOrder(items);
+            // ForceVisible only reveals the fields of the disabled group, the conditions inside the nested class still apply
+            var previousForceVisible = PropertyUtility.ForceVisible;
+
+            PropertyUtility.ForceVisible = false;
+            EditorGUI.indentLevel++;
+            DrawLevel(items, 0);
+            EditorGUI.indentLevel--;
+            PropertyUtility.ForceVisible = previousForceVisible;
+
+            _foldoutPrefix = previousPrefix;
         }
 
         private void DrawNestedBox(SerializedProperty property)
@@ -1180,7 +1245,12 @@ namespace MyInspector.Editor
 
             EditorGUILayout.BeginVertical(GetBoxContentStyle());
             SortByOrder(items);
+
+            var previousForceVisible = PropertyUtility.ForceVisible;
+
+            PropertyUtility.ForceVisible = false;
             DrawLevel(items, 0);
+            PropertyUtility.ForceVisible = previousForceVisible;
             EditorGUILayout.EndVertical();
 
             _foldoutPrefix = previousPrefix;
