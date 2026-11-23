@@ -92,12 +92,18 @@ namespace MyInspector.Editor
                     continue;
                 }
 
-                var callback = target.GetType().GetMethod(
-                    init.Callback,
-                    BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    Type.EmptyTypes,
-                    null);
+                MethodInfo callback = null;
+
+                // Private methods of a base class are not returned when searching from a derived type
+                for (var type = target.GetType(); type != null && callback == null; type = type.BaseType)
+                {
+                    callback = type.GetMethod(
+                        init.Callback,
+                        BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly,
+                        null,
+                        Type.EmptyTypes,
+                        null);
+                }
 
                 callback?.Invoke(target, null);
             }
