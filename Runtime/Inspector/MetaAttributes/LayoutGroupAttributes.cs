@@ -9,6 +9,9 @@ namespace MyInspector
 		public string Group { get; private set; }
 		public string Name { get; private set; }
 
+		/// <summary>Optional parameterless method on the declaring class returning the text displayed on the tab button (the tab is still identified by Name).</summary>
+		public string LabelMethod { get; set; }
+
 		public TabAttribute(string group, string name)
 		{
 			Group = group;

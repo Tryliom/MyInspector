@@ -23,7 +23,35 @@ namespace MyInspector.Editor
             public List<string> Names = new();
             public int Selected;
 
+            // Display text per tab, same order as Names. Null entries fall back to the name.
+            public string[] Labels;
+
             public string SelectedName => Names[Selected];
+
+            public void SetLabel(string name, string label)
+            {
+                var index = Names.IndexOf(name);
+
+                if (index < 0 || string.IsNullOrEmpty(label))
+                {
+                    return;
+                }
+
+                Labels ??= new string[Names.Count];
+                Labels[index] = label;
+            }
+
+            public string[] GetToolbarNames()
+            {
+                var result = new string[Names.Count];
+
+                for (var i = 0; i < result.Length; i++)
+                {
+                    result[i] = Labels != null && Labels[i] != null ? Labels[i] : Names[i];
+                }
+
+                return result;
+            }
 
             public void Select(int index)
             {
@@ -88,6 +116,26 @@ namespace MyInspector.Editor
             }
 
             return groups;
+        }
+
+        /// <summary>
+        /// Calls the LabelMethod of the tab on its owner object. Returns null when there is none or it does not return a string.
+        /// </summary>
+        public static string ResolveLabel(object owner, TabAttribute tab)
+        {
+            if (owner == null || tab == null || string.IsNullOrEmpty(tab.LabelMethod))
+            {
+                return null;
+            }
+
+            var method = ReflectionUtility.GetMethod(owner, tab.LabelMethod);
+
+            if (method == null || method.GetParameters().Length != 0)
+            {
+                return null;
+            }
+
+            return method.Invoke(owner, null) as string;
         }
 
         /// <summary>

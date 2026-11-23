@@ -655,7 +655,15 @@ namespace MyInspector.Editor
             var stateKey = $"MyTab.{target.GetType().Name}.{key}.{string.Join("|", names)}";
             var group = TabGroupUtility.Create(key, names, stateKey);
 
-            group.Select(GUILayout.Toolbar(group.Selected, names.ToArray()));
+            foreach (var item in visible)
+            {
+                if (!string.IsNullOrEmpty(item.Tab.LabelMethod))
+                {
+                    group.SetLabel(item.Tab.Name, TabGroupUtility.ResolveLabel(target, item.Tab));
+                }
+            }
+
+            group.Select(GUILayout.Toolbar(group.Selected, group.GetToolbarNames()));
 
             var tabItems = new List<Item>(visible.Count);
             var tabProperties = new List<SerializedProperty>(visible.Count);

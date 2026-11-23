@@ -762,6 +762,7 @@ namespace MyInspector.Editor
             HeightCache.Clear();
             RunsCache.Clear();
             WidestLabelCache.Clear();
+            TabLayoutCache.Clear();
             BodyCache.Clear();
             PairHeightCache.Clear();
             IndicesCache.Clear();
@@ -1566,6 +1567,27 @@ namespace MyInspector.Editor
         private static float GetChildrenHeight(List<SerializedProperty> children)
         {
             var height = 0f;
+            var layout = GetTabLayout(children);
+
+            if (layout.Count > 0)
+            {
+                for (var i = 0; i < layout.Count; i++)
+                {
+                    var entry = layout[i];
+
+                    if (entry.Toolbar != null)
+                    {
+                        height += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+
+                        continue;
+                    }
+
+                    height += GetTitleHeight(entry.Child) + GetHeight(entry.Child) + EditorGUIUtility.standardVerticalSpacing;
+                    height += (entry.BoxStart ? TabGroupUtility.BoxPaddingVertical : 0f) + (entry.BoxEnd ? TabGroupUtility.BoxPaddingVertical : 0f);
+                }
+
+                return height;
+            }
 
             foreach (var child in children)
             {
@@ -1573,6 +1595,198 @@ namespace MyInspector.Editor
             }
 
             return height;
+        }
+
+        // One entry per drawn element of a children list that contains [Tab] fields: toolbars and only the fields of the selected tabs
+        private class TabEntry
+        {
+            public SerializedProperty Child;
+            public TabGroupUtility.TabGroup Toolbar;
+            public string[] ToolbarNames;
+            public bool InBox;
+            public bool BoxStart;
+            public bool BoxEnd;
+            public float LabelWidth;
+        }
+
+        private static readonly List<TabEntry> NoTabs = new();
+        private static readonly Dictionary<List<SerializedProperty>, List<TabEntry>> TabLayoutCache = new();
+
+        private static List<TabEntry> GetTabLayout(List<SerializedProperty> children)
+        {
+            if (TabLayoutCache.TryGetValue(children, out var cached))
+            {
+                return cached;
+            }
+
+            var layout = ComputeTabLayout(children);
+
+            TabLayoutCache[children] = layout;
+
+            return layout;
+        }
+
+        private static List<TabEntry> ComputeTabLayout(List<SerializedProperty> children)
+        {
+            List<TabAttribute> tabs = null;
+            string firstPath = null;
+
+            foreach (var child in children)
+            {
+                var tab = PropertyUtility.GetAttribute<TabAttribute>(child);
+
+                if (tab == null)
+                {
+                    continue;
+                }
+
+                tabs ??= new List<TabAttribute>();
+                firstPath ??= child.propertyPath;
+                tabs.Add(tab);
+            }
+
+            if (tabs == null)
+            {
+                return NoTabs;
+            }
+
+            var targetName = children[0].serializedObject.targetObject.name;
+            var groups = TabGroupUtility.BuildGroups(tabs, key => $"MyListTab.{targetName}.{firstPath}.{key}");
+            var emitted = new HashSet<string>();
+            var layout = new List<TabEntry>();
+
+            foreach (var child in children)
+            {
+                var tab = PropertyUtility.GetAttribute<TabAttribute>(child);
+
+                if (tab == null)
+                {
+                    layout.Add(new TabEntry { Child = child });
+
+                    continue;
+                }
+
+                if (!emitted.Add(tab.Group))
+                {
+                    continue;
+                }
+
+                var group = groups[tab.Group];
+                var selectedChildren = new List<SerializedProperty>();
+
+                foreach (var other in children)
+                {
+                    var otherTab = PropertyUtility.GetAttribute<TabAttribute>(other);
+
+                    if (otherTab != null && otherTab.Group == tab.Group && !string.IsNullOrEmpty(otherTab.LabelMethod))
+                    {
+                        group.SetLabel(otherTab.Name, TabGroupUtility.ResolveLabel(PropertyUtility.GetTargetObjectWithProperty(other), otherTab));
+                    }
+                }
+
+                layout.Add(new TabEntry { Toolbar = group, ToolbarNames = group.GetToolbarNames() });
+
+                foreach (var other in children)
+                {
+                    var otherTab = PropertyUtility.GetAttribute<TabAttribute>(other);
+
+                    if (otherTab != null && otherTab.Group == tab.Group && otherTab.Name == group.SelectedName)
+                    {
+                        selectedChildren.Add(other);
+                    }
+                }
+
+                var labelWidth = selectedChildren.Count > 0 ? TabGroupUtility.MeasureLabelWidth(new List<SerializedProperty>(selectedChildren), 400f) : 0f;
+
+                for (var i = 0; i < selectedChildren.Count; i++)
+                {
+                    layout.Add(new TabEntry
+                    {
+                        Child = selectedChildren[i],
+                        InBox = true,
+                        BoxStart = i == 0,
+                        BoxEnd = i == selectedChildren.Count - 1,
+                        LabelWidth = labelWidth
+                    });
+                }
+            }
+
+            return layout;
+        }
+
+        private static void DrawTabbedChildren(Rect rect, List<TabEntry> layout, ref float y)
+        {
+            var previousOverride = _labelWidthOverride;
+
+            for (var i = 0; i < layout.Count; i++)
+            {
+                var entry = layout[i];
+
+                if (entry.Toolbar != null)
+                {
+                    var toolbarRect = new Rect(rect.x, y, rect.width, EditorGUIUtility.singleLineHeight);
+                    var selected = GUI.Toolbar(toolbarRect, entry.Toolbar.Selected, entry.ToolbarNames);
+
+                    y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+
+                    if (selected != entry.Toolbar.Selected)
+                    {
+                        entry.Toolbar.Select(selected);
+                        GUI.changed = true;
+                        ClearHeightCache();
+
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (entry.BoxStart)
+                {
+                    var boxHeight = TabGroupUtility.BoxPaddingVertical * 2f;
+
+                    for (var j = i; j < layout.Count; j++)
+                    {
+                        boxHeight += GetHeight(layout[j].Child) + EditorGUIUtility.standardVerticalSpacing;
+
+                        if (layout[j].BoxEnd)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (Event.current.type == EventType.Repaint)
+                    {
+                        EditorStyles.helpBox.Draw(new Rect(rect.x, y, rect.width, boxHeight), GUIContent.none, false, false, false, false);
+                    }
+
+                    y += TabGroupUtility.BoxPaddingVertical;
+                }
+
+                var title = GetCustomTitle(entry.Child);
+                var height = GetHeight(entry.Child);
+                var insetLeft = entry.InBox ? TabGroupUtility.BoxPaddingLeft : 0f;
+                var insetRight = entry.InBox ? TabGroupUtility.BoxPaddingRight : 0f;
+                var fieldRect = new Rect(rect.x + insetLeft, y, rect.width - insetLeft - insetRight, height);
+
+                if (title != null)
+                {
+                    DrawTitle(rect, title.Title, y);
+                    y += GetTitleHeight(entry.Child);
+                    fieldRect.y = y;
+                }
+
+                _labelWidthOverride = entry.InBox ? entry.LabelWidth : GetWidestLabel(new List<SerializedProperty> { entry.Child });
+                Field(fieldRect, entry.Child);
+                y += height + EditorGUIUtility.standardVerticalSpacing;
+
+                if (entry.BoxEnd)
+                {
+                    y += TabGroupUtility.BoxPaddingVertical;
+                }
+            }
+
+            _labelWidthOverride = previousOverride;
         }
 
         // Leaf fields get their Title from the PropertyField decorator; custom-drawn ones bypass it, so it is drawn here
@@ -1625,7 +1839,31 @@ namespace MyInspector.Editor
         {
             var runs = new List<(FoldoutAttribute Foldout, List<SerializedProperty> Children)>();
 
+            // Keep every tabbed field next to the first one so they share a single toolbar
+            var ordered = new List<SerializedProperty>();
+            var firstTabIndex = -1;
+
             foreach (var child in GetChildren(property))
+            {
+                var isTab = PropertyUtility.GetAttribute<TabAttribute>(child) != null && PropertyUtility.GetAttribute<FoldoutAttribute>(child) == null;
+
+                if (!isTab)
+                {
+                    ordered.Add(child);
+                }
+                else if (firstTabIndex < 0)
+                {
+                    ordered.Add(child);
+                    firstTabIndex = ordered.Count;
+                }
+                else
+                {
+                    ordered.Insert(firstTabIndex, child);
+                    firstTabIndex++;
+                }
+            }
+
+            foreach (var child in ordered)
             {
                 var foldout = PropertyUtility.GetAttribute<FoldoutAttribute>(child);
 
@@ -1656,6 +1894,15 @@ namespace MyInspector.Editor
 
         private static void DrawChildren(Rect rect, List<SerializedProperty> children, ref float y)
         {
+            var tabLayout = GetTabLayout(children);
+
+            if (tabLayout.Count > 0)
+            {
+                DrawTabbedChildren(rect, tabLayout, ref y);
+
+                return;
+            }
+
             var previousOverride = _labelWidthOverride;
             var widest = GetWidestLabel(children);
 
