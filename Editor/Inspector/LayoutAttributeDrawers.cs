@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using MyInspector;
+using MyInspector.Editor;
 using UnityEditor;
 using UnityEngine;
 
@@ -10,6 +12,56 @@ public class InlinePropertyDrawer : PropertyDrawer
 	private bool IsInline(SerializedProperty property)
 	{
 		return property.propertyType == SerializedPropertyType.Generic && property.hasVisibleChildren && !property.isArray;
+	}
+
+	private static readonly System.Collections.Generic.Dictionary<Type, System.Collections.Generic.List<System.Reflection.MethodInfo>> ButtonCache = new();
+
+	// [Button] methods declared on the inlined type are drawn after its fields
+	private static System.Collections.Generic.List<System.Reflection.MethodInfo> GetButtons(Type type)
+	{
+		if (ButtonCache.TryGetValue(type, out var cached))
+		{
+			return cached;
+		}
+
+		var buttons = new System.Collections.Generic.List<System.Reflection.MethodInfo>();
+		const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+
+		foreach (var method in type.GetMethods(flags))
+		{
+			if (method.GetCustomAttributes(typeof(ButtonAttribute), true).Length == 0)
+			{
+				continue;
+			}
+
+			var valid = true;
+
+			foreach (var parameter in method.GetParameters())
+			{
+				if (!parameter.IsOptional)
+				{
+					valid = false;
+
+					break;
+				}
+			}
+
+			if (valid)
+			{
+				buttons.Add(method);
+			}
+		}
+
+		ButtonCache[type] = buttons;
+
+		return buttons;
+	}
+
+	private static System.Collections.Generic.List<System.Reflection.MethodInfo> GetButtons(SerializedProperty property)
+	{
+		var target = PropertyUtility.GetTargetObjectOfProperty(property);
+
+		return target == null ? null : GetButtons(target.GetType());
 	}
 
 	public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
@@ -33,6 +85,13 @@ public class InlinePropertyDrawer : PropertyDrawer
 			{
 				break;
 			}
+		}
+
+		var buttons = GetButtons(property);
+
+		if (buttons != null)
+		{
+			height += buttons.Count * (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
 		}
 
 		return Mathf.Max(height - EditorGUIUtility.standardVerticalSpacing, EditorGUIUtility.singleLineHeight);
@@ -63,6 +122,40 @@ public class InlinePropertyDrawer : PropertyDrawer
 			{
 				break;
 			}
+		}
+
+		var buttons = GetButtons(property);
+
+		if (buttons == null)
+		{
+			return;
+		}
+
+		var target = PropertyUtility.GetTargetObjectOfProperty(property);
+
+		foreach (var method in buttons)
+		{
+			var buttonAttribute = (ButtonAttribute)method.GetCustomAttributes(typeof(ButtonAttribute), true)[0];
+			var text = string.IsNullOrEmpty(buttonAttribute.Text) ? ObjectNames.NicifyVariableName(method.Name) : buttonAttribute.Text;
+			var buttonRect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+
+			if (GUI.Button(buttonRect, text))
+			{
+				var parameters = method.GetParameters();
+				var args = new object[parameters.Length];
+
+				for (var i = 0; i < parameters.Length; i++)
+				{
+					args[i] = parameters[i].DefaultValue;
+				}
+
+				property.serializedObject.ApplyModifiedProperties();
+				method.Invoke(target, args);
+				property.serializedObject.Update();
+				EditorUtility.SetDirty(property.serializedObject.targetObject);
+			}
+
+			position.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
 		}
 	}
 }
