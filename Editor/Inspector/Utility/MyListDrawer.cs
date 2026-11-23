@@ -399,7 +399,7 @@ namespace MyInspector.Editor
                 }
             }
 
-            return Mathf.Max(0f, height - EditorGUIUtility.standardVerticalSpacing);
+            return Mathf.Max(0f, height - EditorGUIUtility.standardVerticalSpacing) + GetLooseButtonsHeight(value);
         }
 
         // A single container wrapped in a same-named Foldout is drawn as a regular boxed container, like its nested ones
@@ -456,6 +456,8 @@ namespace MyInspector.Editor
 
                 _labelWidthOverride = previousOverride;
             }
+
+            DrawLooseButtons(rect, value, ref y);
         }
 
         private static readonly System.Reflection.PropertyInfo VisibleRectProperty =
@@ -1205,7 +1207,105 @@ namespace MyInspector.Editor
                 height += GetFoldoutRunHeight(property, run.Foldout, run.Children);
             }
 
-            return height;
+            return height + GetLooseButtonsHeight(property);
+        }
+
+        private static readonly Dictionary<Type, List<System.Reflection.MethodInfo>> LooseButtonCache = new();
+
+        // [Button] methods without a [Foldout] on the container type are drawn after all its fields
+        private static List<System.Reflection.MethodInfo> GetLooseButtons(SerializedProperty property)
+        {
+            var target = PropertyUtility.GetTargetObjectOfProperty(property);
+
+            if (target == null)
+            {
+                return null;
+            }
+
+            var type = target.GetType();
+
+            if (LooseButtonCache.TryGetValue(type, out var cached))
+            {
+                return cached;
+            }
+
+            var buttons = new List<System.Reflection.MethodInfo>();
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+
+            foreach (var method in type.GetMethods(flags))
+            {
+                if (method.GetCustomAttributes(typeof(ButtonAttribute), true).Length == 0
+                    || method.GetCustomAttributes(typeof(FoldoutAttribute), true).Length > 0)
+                {
+                    continue;
+                }
+
+                var valid = true;
+
+                foreach (var parameter in method.GetParameters())
+                {
+                    if (!parameter.IsOptional)
+                    {
+                        valid = false;
+
+                        break;
+                    }
+                }
+
+                if (valid)
+                {
+                    buttons.Add(method);
+                }
+            }
+
+            LooseButtonCache[type] = buttons;
+
+            return buttons;
+        }
+
+        private static float GetLooseButtonsHeight(SerializedProperty property)
+        {
+            var buttons = GetLooseButtons(property);
+
+            return buttons == null ? 0f : buttons.Count * (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
+        }
+
+        private static void DrawLooseButtons(Rect rect, SerializedProperty property, ref float y)
+        {
+            var buttons = GetLooseButtons(property);
+
+            if (buttons == null || buttons.Count == 0)
+            {
+                return;
+            }
+
+            var target = PropertyUtility.GetTargetObjectOfProperty(property);
+
+            foreach (var method in buttons)
+            {
+                var attribute = (ButtonAttribute)method.GetCustomAttributes(typeof(ButtonAttribute), true)[0];
+                var text = string.IsNullOrEmpty(attribute.Text) ? ObjectNames.NicifyVariableName(method.Name) : attribute.Text;
+
+                if (GUI.Button(new Rect(rect.x, y, rect.width, EditorGUIUtility.singleLineHeight), text))
+                {
+                    var serializedObject = property.serializedObject;
+                    var parameters = method.GetParameters();
+                    var arguments = new object[parameters.Length];
+
+                    for (var i = 0; i < parameters.Length; i++)
+                    {
+                        arguments[i] = parameters[i].DefaultValue;
+                    }
+
+                    serializedObject.ApplyModifiedProperties();
+                    method.Invoke(target, arguments);
+                    EditorUtility.SetDirty(serializedObject.targetObject);
+                    serializedObject.Update();
+                    GUIUtility.ExitGUI();
+                }
+
+                y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+            }
         }
 
         private static float GetFoldoutRunHeight(SerializedProperty property, FoldoutAttribute foldout, List<SerializedProperty> children)
@@ -1724,6 +1824,8 @@ namespace MyInspector.Editor
                     }
                 }
 
+                DrawLooseButtons(plainInner, property, ref y);
+
                 return;
             }
 
@@ -1769,6 +1871,8 @@ namespace MyInspector.Editor
                     DrawFoldoutRun(inner, property, run.Foldout, run.Children, ref y);
                 }
             }
+
+            DrawLooseButtons(inner, property, ref y);
         }
 
         public static void Draw(Rect rect, SerializedProperty property)
