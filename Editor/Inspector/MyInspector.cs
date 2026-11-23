@@ -209,7 +209,7 @@ namespace MyInspector.Editor
         {
             var field = GetField(property);
 
-            return field != null && field.GetCustomAttribute<SerializeReference>() != null;
+            return field != null && AttributeCache.Get<SerializeReference>(field) != null;
         }
 
         private static Type GetElementType(Type type)
@@ -282,11 +282,11 @@ namespace MyInspector.Editor
                 Method = member as MethodInfo,
                 Field = member as FieldInfo,
                 Native = member as PropertyInfo,
-                Tab = member.GetCustomAttribute<TabAttribute>(true),
-                Foldout = member.GetCustomAttribute<FoldoutAttribute>(true),
-                Box = member.GetCustomAttribute<BoxGroupAttribute>(true),
-                Horizontal = member.GetCustomAttribute<HorizontalGroupAttribute>(true),
-                Vertical = member.GetCustomAttribute<VerticalGroupAttribute>(true)
+                Tab = AttributeCache.Get<TabAttribute>(member),
+                Foldout = AttributeCache.Get<FoldoutAttribute>(member),
+                Box = AttributeCache.Get<BoxGroupAttribute>(member),
+                Horizontal = AttributeCache.Get<HorizontalGroupAttribute>(member),
+                Vertical = AttributeCache.Get<VerticalGroupAttribute>(member)
             };
 
             FillCommon(item, member, true);
@@ -301,14 +301,14 @@ namespace MyInspector.Editor
                 return;
             }
 
-            item.Order = member.GetCustomAttribute<PropertyOrderAttribute>(true)?.Order ?? 0;
-            item.Space = member.GetCustomAttribute<PropertySpaceAttribute>(true)?.Space ?? 0f;
-            item.List = member.GetCustomAttribute<ListDrawerSettingsAttribute>(true);
-            item.Table = member.GetCustomAttribute<TableListAttribute>(true);
+            item.Order = AttributeCache.Get<PropertyOrderAttribute>(member)?.Order ?? 0;
+            item.Space = AttributeCache.Get<PropertySpaceAttribute>(member)?.Space ?? 0f;
+            item.List = AttributeCache.Get<ListDrawerSettingsAttribute>(member);
+            item.Table = AttributeCache.Get<TableListAttribute>(member);
 
             if (readTitle)
             {
-                item.Title = member.GetCustomAttribute<TitleAttribute>(true)?.Title;
+                item.Title = AttributeCache.Get<TitleAttribute>(member)?.Title;
             }
         }
 
@@ -403,7 +403,17 @@ namespace MyInspector.Editor
             {
                 var layer = FirstLayer(item);
                 var key = item.Key(layer);
-                var index = items.FindLastIndex(i => i.Key(layer) == key);
+                var index = -1;
+
+                for (var n = items.Count - 1; n >= 0; n--)
+                {
+                    if (items[n].Key(layer) == key)
+                    {
+                        index = n;
+
+                        break;
+                    }
+                }
 
                 if (index < 0)
                 {
@@ -416,7 +426,17 @@ namespace MyInspector.Editor
                         continue;
                     }
 
-                    index = items.FindIndex(i => i.Order > item.Order);
+                    index = -1;
+
+                    for (var n = 0; n < items.Count; n++)
+                    {
+                        if (items[n].Order > item.Order)
+                        {
+                            index = n;
+
+                            break;
+                        }
+                    }
 
                     if (index < 0)
                     {
@@ -488,7 +508,7 @@ namespace MyInspector.Editor
                 return;
             }
 
-            var handled = new HashSet<string>();
+            HashSet<string> handled = null;
 
             for (var i = 0; i < items.Count; i++)
             {
@@ -500,13 +520,15 @@ namespace MyInspector.Editor
 
                     if (deeper < 0)
                     {
-                        DrawLevel(new List<Item> { items[i] }, LayerCount);
+                        DrawItem(items[i]);
 
                         continue;
                     }
 
                     // Items without a key here but sharing a deeper group are merged into the same deeper group
                     var deeperKey = items[i].Key(deeper);
+
+                    handled ??= new HashSet<string>();
 
                     if (!handled.Add($"{deeper}:{deeperKey}"))
                     {
@@ -532,6 +554,8 @@ namespace MyInspector.Editor
                 }
 
                 // Groups with the same name are merged even when not declared contiguously
+                handled ??= new HashSet<string>();
+
                 if (!handled.Add(key))
                 {
                     continue;
@@ -977,7 +1001,7 @@ namespace MyInspector.Editor
             if (string.IsNullOrEmpty(title) && property != null && item.Field != null && IsCustomDrawn(item))
             {
                 // Custom drawn properties bypass PropertyField, so decorator drawers (Title) never run
-                title = item.Field.GetCustomAttribute<TitleAttribute>(true)?.Title;
+                title = AttributeCache.Get<TitleAttribute>(item.Field)?.Title;
             }
 
             if (!string.IsNullOrEmpty(title))
@@ -993,8 +1017,12 @@ namespace MyInspector.Editor
             if (property != null && item.Field != null && IsCustomDrawn(item))
             {
                 // Same reason as Title: lists/containers bypass PropertyField, so InfoBox decorators never run
-                foreach (var info in item.Field.GetCustomAttributes<InfoBoxAttribute>(true))
+                var infos = AttributeCache.GetAll<InfoBoxAttribute>(item.Field);
+
+                for (var i = 0; i < infos.Length; i++)
                 {
+                    var info = (InfoBoxAttribute)infos[i];
+
                     MyEditorGUI.HelpBox_Layout(ResolveText(info.Text), ToMessageType(info.Type));
                 }
             }
@@ -1201,11 +1229,17 @@ namespace MyInspector.Editor
             _foldoutPrefix = previousPrefix;
         }
 
+        private readonly Dictionary<string, string> _nestedKeys = new Dictionary<string, string>();
+
         private void DrawNestedBox(SerializedProperty property)
         {
             var headerRect = GetBoxHeaderRect();
 
-            var foldoutKey = $"MyInspector.Nested.{target.GetType().FullName}.{property.propertyPath}";
+            if (!_nestedKeys.TryGetValue(property.propertyPath, out var foldoutKey))
+            {
+                foldoutKey = $"MyInspector.Nested.{target.GetType().FullName}.{property.propertyPath}";
+                _nestedKeys[property.propertyPath] = foldoutKey;
+            }
 
             if (!_foldouts.TryGetValue(foldoutKey, out var saved))
             {
@@ -1213,6 +1247,7 @@ namespace MyInspector.Editor
                 _foldouts[foldoutKey] = saved;
             }
 
+            MyListDrawer.HandleContainerContextClick(headerRect, property);
             saved.Value = EditorGUI.Foldout(headerRect, saved.Value, PropertyUtility.GetLabel(property), true);
             property.isExpanded = saved.Value;
 
@@ -1316,16 +1351,18 @@ namespace MyInspector.Editor
 
         private void DrawNonSerializedField(FieldInfo field)
         {
-            var infoBoxes = field.GetCustomAttributes<InfoBoxAttribute>(true);
+            var infoBoxes = AttributeCache.GetAll<InfoBoxAttribute>(field);
 
-            foreach (var info in infoBoxes)
+            for (var i = 0; i < infoBoxes.Length; i++)
             {
+                var info = (InfoBoxAttribute)infoBoxes[i];
+
                 MyEditorGUI.HelpBox_Layout(ResolveText(info.Text), ToMessageType(info.Type));
             }
 
-            var label = field.GetCustomAttribute<LabelAttribute>(true)?.Label ?? ObjectNames.NicifyVariableName(field.Name);
+            var label = AttributeCache.Get<LabelAttribute>(field)?.Label ?? ObjectNames.NicifyVariableName(field.Name);
 
-            if (field.GetCustomAttribute<HideLabelAttribute>(true) != null)
+            if (AttributeCache.Get<HideLabelAttribute>(field) != null)
             {
                 label = string.Empty;
             }
@@ -1333,10 +1370,10 @@ namespace MyInspector.Editor
             var owner = field.IsStatic ? null : (object)target;
             var value = field.GetValue(owner);
             var readOnly = field.IsInitOnly || field.IsLiteral
-                || field.GetCustomAttribute<ReadOnlyAttribute>(true) != null
+                || AttributeCache.Get<ReadOnlyAttribute>(field) != null
                 || !ButtonUtility.IsEnabled(target, field);
 
-            var displayAsString = field.GetCustomAttribute<DisplayAsStringAttribute>(true);
+            var displayAsString = AttributeCache.Get<DisplayAsStringAttribute>(field);
 
             if (displayAsString != null)
             {
@@ -1375,7 +1412,7 @@ namespace MyInspector.Editor
                 return;
             }
 
-            if (value is System.Collections.IList tableValue && field.GetCustomAttribute<TableListAttribute>(true) is { } tableAttribute)
+            if (value is System.Collections.IList tableValue && AttributeCache.Get<TableListAttribute>(field) is { } tableAttribute)
             {
                 MyTableDrawer.Draw(tableValue, target, label, readOnly || tableAttribute.IsReadOnly);
 
@@ -1396,7 +1433,7 @@ namespace MyInspector.Editor
                 return;
             }
 
-            var range = field.GetCustomAttribute<RangeAttribute>(true);
+            var range = AttributeCache.Get<RangeAttribute>(field);
 
             if (range != null && (value is int || value is float))
             {
@@ -1544,8 +1581,12 @@ namespace MyInspector.Editor
 
         private void DrawButton(MethodInfo method)
         {
-            foreach (var info in method.GetCustomAttributes<InfoBoxAttribute>(true))
+            var infoBoxes = AttributeCache.GetAll<InfoBoxAttribute>(method);
+
+            for (var i = 0; i < infoBoxes.Length; i++)
             {
+                var info = (InfoBoxAttribute)infoBoxes[i];
+
                 MyEditorGUI.HelpBox_Layout(ResolveText(info.Text), ToMessageType(info.Type));
             }
 

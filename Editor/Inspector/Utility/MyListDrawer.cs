@@ -55,10 +55,27 @@ namespace MyInspector.Editor
 
         public static bool IsDictionary(SerializedProperty property)
         {
-            return property.propertyType == SerializedPropertyType.Generic && !property.isArray
-                && property.FindPropertyRelative("keyData") is { isArray: true }
+            if (property.propertyType != SerializedPropertyType.Generic || property.isArray)
+            {
+                return false;
+            }
+
+            var key = (property.serializedObject.GetHashCode(), property.propertyPath);
+
+            if (DictionaryFlags.TryGetValue(key, out var flag))
+            {
+                return flag;
+            }
+
+            flag = property.FindPropertyRelative("keyData") is { isArray: true }
                 && property.FindPropertyRelative("valueData") is { isArray: true };
+            DictionaryFlags[key] = flag;
+
+            return flag;
         }
+
+        // Structure of a property path never changes for a given object, so the dictionary check is cached
+        private static readonly Dictionary<(int Object, string Path), bool> DictionaryFlags = new();
 
         private static float GetDictionaryHeight(SerializedProperty property)
         {
@@ -748,6 +765,8 @@ namespace MyInspector.Editor
             BodyCache.Clear();
             PairHeightCache.Clear();
             IndicesCache.Clear();
+            DictionaryFlags.Clear();
+            ContainerFlags.Clear();
             ValueChildrenCache.Clear();
             PropertyUtility.ClearVisibilityCache();
         }
@@ -1041,13 +1060,32 @@ namespace MyInspector.Editor
             }
             else if (property.propertyType == SerializedPropertyType.Generic)
             {
+                var key = (property.serializedObject.GetHashCode(), property.propertyPath);
+
+                if (ContainerFlags.TryGetValue(key, out var cachedFlag))
+                {
+                    return cachedFlag;
+                }
+
                 type = ResolveDeclaredType(property) ?? property.boxedValue?.GetType();
+                cachedFlag = IsContainerType(type);
+                ContainerFlags[key] = cachedFlag;
+
+                return cachedFlag;
             }
             else
             {
                 return false;
             }
 
+            return IsContainerType(type);
+        }
+
+        // Generic fields have a fixed declared type, so their container status is cached until the next cache clear
+        private static readonly Dictionary<(int Object, string Path), bool> ContainerFlags = new();
+
+        private static bool IsContainerType(Type type)
+        {
             if (type == null || type.Namespace != null && (type.Namespace.StartsWith("UnityEngine") || type.Namespace.StartsWith("System")))
             {
                 return false;
@@ -1540,7 +1578,10 @@ namespace MyInspector.Editor
         // Leaf fields get their Title from the PropertyField decorator; custom-drawn ones bypass it, so it is drawn here
         private static TitleAttribute GetCustomTitle(SerializedProperty child)
         {
-            return IsLeaf(child) ? null : PropertyUtility.GetAttribute<TitleAttribute>(child);
+            var title = PropertyUtility.GetAttribute<TitleAttribute>(child);
+
+            // Checking the cached attribute first avoids the allocating structural checks in IsLeaf
+            return title == null || IsLeaf(child) ? null : title;
         }
 
         private static float GetTitleHeight(SerializedProperty child)
@@ -1843,6 +1884,7 @@ namespace MyInspector.Editor
             {
                 var line = new Rect(rect.x + 16f, rect.y, rect.width - 16f, EditorGUIUtility.singleLineHeight);
 
+                HandleContainerContextClick(line, property);
                 property.isExpanded = EditorGUI.Foldout(line, property.isExpanded, label ?? PropertyUtility.GetLabel(property), true);
 
                 if (!property.isExpanded)
@@ -1882,7 +1924,8 @@ namespace MyInspector.Editor
 
                 var line = new Rect(header.x + 18f, header.y + HeaderPadding + (HeaderHeight - EditorGUIUtility.singleLineHeight) * 0.5f, header.width - 18f, EditorGUIUtility.singleLineHeight);
 
-                property.isExpanded = EditorGUI.Foldout(line, property.isExpanded, label ?? PropertyUtility.GetLabel(property), true);
+                                HandleContainerContextClick(header, property);
+                                property.isExpanded = EditorGUI.Foldout(line, property.isExpanded, label ?? PropertyUtility.GetLabel(property), true);
 
                 if (!property.isExpanded)
                 {
@@ -2497,6 +2540,22 @@ namespace MyInspector.Editor
                     property.boxedValue = value;
                 }
             }
+        }
+
+        /// <summary>Shows Copy/Paste entries for the container itself when its own header is right-clicked.</summary>
+        public static void HandleContainerContextClick(Rect headerRect, SerializedProperty property)
+        {
+            if (Event.current.type != EventType.ContextClick || !headerRect.Contains(Event.current.mousePosition)
+                || property.propertyType != SerializedPropertyType.Generic || property.isArray)
+            {
+                return;
+            }
+
+            var menu = new GenericMenu();
+
+            AddInlineCopyPaste(menu, property);
+            menu.ShowAsContext();
+            Event.current.Use();
         }
 
         // Adds "Copy <field>" / "Paste <field>" entries for an inline property; the snapshot is only taken when clicked

@@ -78,14 +78,29 @@ namespace MyInspector.Editor
         private static readonly System.Collections.Generic.Dictionary<(FieldInfo, System.Type), System.Array> AttributeCache =
             new System.Collections.Generic.Dictionary<(FieldInfo, System.Type), System.Array>();
 
+        private static readonly System.Collections.Generic.Dictionary<(int, string), GUIContent> LabelCache =
+            new System.Collections.Generic.Dictionary<(int, string), GUIContent>();
+
         public static GUIContent GetLabel(SerializedProperty property)
         {
-            LabelAttribute labelAttribute = GetAttribute<LabelAttribute>(property);
-            string labelText = (labelAttribute == null)
-                ? property.displayName
-                : labelAttribute.Label;
+            // Array element names can follow their content, so only regular fields are cached
+            var cacheable = property.propertyPath.IndexOf(".Array.data[", System.StringComparison.Ordinal) < 0;
+            var key = (property.serializedObject.GetHashCode(), property.propertyPath);
 
-            GUIContent label = new GUIContent(labelText);
+            if (cacheable && LabelCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            var labelAttribute = GetAttribute<LabelAttribute>(property);
+            var labelText = labelAttribute == null ? property.displayName : labelAttribute.Label;
+            var label = new GUIContent(labelText);
+
+            if (cacheable)
+            {
+                LabelCache[key] = label;
+            }
+
             return label;
         }
 
