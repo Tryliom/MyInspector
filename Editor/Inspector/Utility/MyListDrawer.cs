@@ -996,6 +996,11 @@ namespace MyInspector.Editor
                     ? Mathf.Min(_labelWidthOverride, rect.width * 0.6f)
                     : Mathf.Min(previousLabelWidth, Mathf.Max(80f, rect.width * 0.3f));
 
+                if (label == null && PropertyUtility.GetAttribute<LabelAttribute>(property) != null)
+                {
+                    label = PropertyUtility.GetLabel(property);
+                }
+
                 if (label != null)
                 {
                     EditorGUI.PropertyField(rect, property, label, true);
@@ -1956,7 +1961,7 @@ namespace MyInspector.Editor
             {
                 if (IsLeaf(child))
                 {
-                    widest = Mathf.Max(widest, GetLabelWidth(child.displayName));
+                    widest = Mathf.Max(widest, GetLabelWidth(PropertyUtility.GetLabel(child).text));
                 }
             }
 
