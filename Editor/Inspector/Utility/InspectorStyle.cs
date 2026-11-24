@@ -48,7 +48,7 @@ namespace MyInspector.Editor
         public static readonly Color DragInsertionLine = Color.white;
 
         // ---- Indentation ----
-        public const float IndentLength = 15f;
+        public const float IndentLength = 0f;
         public const float HorizontalSpacing = 2f;
         public const float ListElementIndent = 32f;
         public const float ListContainerIndent = 14f;

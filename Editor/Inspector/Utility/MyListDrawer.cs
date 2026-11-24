@@ -1017,11 +1017,13 @@ namespace MyInspector.Editor
         // A null [SerializeReference] field has no children to draw: offer a button to create the instance
         private static void DrawNullReferenceButton(Rect rect, SerializedProperty property, GUIContent label)
         {
-            var baseType = ResolveDeclaredType(property);
+            // The field type name given by Unity is reliable even when the path crosses derived managed references
+            var baseType = ResolveManagedReferenceType(property.managedReferenceFieldTypename) ?? ResolveDeclaredType(property);
             var buttonRect = EditorGUI.PrefixLabel(rect, label ?? new GUIContent(property.displayName));
-            var canInstantiate = baseType != null && !baseType.IsAbstract && !baseType.IsInterface && baseType.GetConstructor(Type.EmptyTypes) != null;
+            var singleType = GetSingleType(baseType);
+            var canInstantiate = singleType != null;
 
-            if (!EditorGUI.DropdownButton(buttonRect, new GUIContent(canInstantiate ? "Initialize" : "Select type..."), FocusType.Keyboard, canInstantiate ? EditorStyles.miniButton : EditorStyles.popup))
+            if (!EditorGUI.DropdownButton(buttonRect, new GUIContent(canInstantiate ? "Initialize" : "Select..."), FocusType.Keyboard, canInstantiate ? EditorStyles.miniButton : EditorStyles.popup))
             {
                 return;
             }
@@ -1039,12 +1041,35 @@ namespace MyInspector.Editor
 
             if (canInstantiate)
             {
-                Assign(baseType);
+                Assign(singleType);
             }
             else if (baseType != null)
             {
                 ShowTypeMenu(baseType, Assign);
             }
+        }
+
+        private static readonly Dictionary<Type, Type> SingleTypeCache = new Dictionary<Type, Type>();
+
+        // Returns the only instantiable type for the base type, or null when there is none or several choices
+        private static Type GetSingleType(Type baseType)
+        {
+            if (baseType == null)
+            {
+                return null;
+            }
+
+            if (SingleTypeCache.TryGetValue(baseType, out var cached))
+            {
+                return cached;
+            }
+
+            var types = GetTypes(baseType);
+            var result = types.Count == 1 && types[0].GetConstructor(Type.EmptyTypes) != null ? types[0] : null;
+
+            SingleTypeCache[baseType] = result;
+
+            return result;
         }
 
         private static bool IsInline(SerializedProperty property)
