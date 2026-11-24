@@ -59,6 +59,7 @@ namespace MyInspector.Editor
         public const float TabBoxPaddingLeft = 18f;
         public const float TabBoxPaddingRight = 6f;
         public const float TabBoxPaddingVertical = 6f;
+        public const float TabBoxHiddenTopHeight = 3f;
 
         // ---- Lists, dictionaries, foldouts ----
         public const float ListHeaderHeight = 22f;

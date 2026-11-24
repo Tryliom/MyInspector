@@ -685,7 +685,9 @@ namespace MyInspector.Editor
                 EditorGUIUtility.labelWidth = widest;
             }
 
-            EditorGUILayout.BeginVertical(TabGroupUtility.BoxStyle);
+            var boxRect = EditorGUILayout.BeginVertical(TabGroupUtility.ContentStyle);
+
+            TabGroupUtility.DrawBox(boxRect);
             DrawLevel(tabItems, depth + 1);
             EditorGUILayout.EndVertical();
 

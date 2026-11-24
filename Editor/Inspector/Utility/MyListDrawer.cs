@@ -1587,7 +1587,7 @@ namespace MyInspector.Editor
 
                     if (entry.Toolbar != null)
                     {
-                        height += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+                        height += EditorGUIUtility.singleLineHeight;
 
                         continue;
                     }
@@ -1737,7 +1737,7 @@ namespace MyInspector.Editor
                     var toolbarRect = new Rect(rect.x, y, rect.width, EditorGUIUtility.singleLineHeight);
                     var selected = GUI.Toolbar(toolbarRect, entry.Toolbar.Selected, entry.ToolbarNames);
 
-                    y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+                    y += EditorGUIUtility.singleLineHeight;
 
                     if (selected != entry.Toolbar.Selected)
                     {
@@ -1765,10 +1765,7 @@ namespace MyInspector.Editor
                         }
                     }
 
-                    if (Event.current.type == EventType.Repaint)
-                    {
-                        EditorStyles.helpBox.Draw(new Rect(rect.x, y, rect.width, boxHeight), GUIContent.none, false, false, false, false);
-                    }
+                    TabGroupUtility.DrawBox(new Rect(rect.x, y, rect.width, boxHeight));
 
                     y += TabGroupUtility.BoxPaddingVertical;
                 }

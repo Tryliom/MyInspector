@@ -15,6 +15,7 @@ namespace MyInspector.Editor
         public const float BoxPaddingVertical = InspectorStyle.TabBoxPaddingVertical;
 
         private static GUIStyle _boxStyle;
+        private static GUIStyle _contentStyle;
 
         public sealed class TabGroup
         {
@@ -69,6 +70,34 @@ namespace MyInspector.Editor
                     padding = new RectOffset((int) BoxPaddingLeft, (int) BoxPaddingRight, (int) BoxPaddingVertical, (int) BoxPaddingVertical)
                 };
             }
+        }
+
+        // Same padding as BoxStyle but without background or top margin, so the box can be drawn separately
+        public static GUIStyle ContentStyle
+        {
+            get
+            {
+                return _contentStyle ??= new GUIStyle
+                {
+                    padding = BoxStyle.padding,
+                    margin = new RectOffset(BoxStyle.margin.left, BoxStyle.margin.right, 0, BoxStyle.margin.bottom)
+                };
+            }
+        }
+
+        /// <summary>
+        /// Draws the box background without its top border, so it joins the tabs above it.
+        /// </summary>
+        public static void DrawBox(Rect rect)
+        {
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+
+            GUI.BeginClip(rect);
+            BoxStyle.Draw(new Rect(0f, -InspectorStyle.TabBoxHiddenTopHeight, rect.width, rect.height + InspectorStyle.TabBoxHiddenTopHeight), GUIContent.none, false, false, false, false);
+            GUI.EndClip();
         }
 
         public static TabGroup Create(string key, List<string> names, string stateKey)
