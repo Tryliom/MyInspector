@@ -76,6 +76,9 @@ namespace MyInspector.Editor
         public const float BoolTitleToggleOffset = 2f;
         // Width reserved for the foldout arrow before the BoolTitle checkbox in list/container headers
         public const float BoolTitleArrowWidth = 5f;
+        // Margins around a UnityEvent drawn inside a container, since its drawer paints its box beyond the given rect
+        public const float UnityEventTopMargin = 6f;
+        public const float UnityEventLeftIndent = 14f;
         public const float FoldoutBottomSpace = ListBottomPadding;
         public const float ListCountWidth = 110f;
         public const float ListSearchWidth = 110f;

@@ -624,6 +624,7 @@ namespace MyInspector.Editor
             if (GUI.Button(addRect, EditorGUIUtility.IconContent("Toolbar Plus"), EditorStyles.iconButton))
             {
                 AddEntry(keys, values);
+                ExpandForAdd(property);
 
                 if (search.Length > 0)
                 {
@@ -771,7 +772,7 @@ namespace MyInspector.Editor
             CacheVersion++;
             HeightCache.Clear();
             RunsCache.Clear();
-            WidestLabelCache.Clear();
+            RunParents.Clear();
             TabLayoutCache.Clear();
             BodyCache.Clear();
             PairHeightCache.Clear();
@@ -899,7 +900,9 @@ namespace MyInspector.Editor
 
             if (!IsList(property))
             {
-                return EditorGUI.GetPropertyHeight(property, true);
+                var propertyHeight = EditorGUI.GetPropertyHeight(property, true);
+
+                return IsUnityEvent(property) ? propertyHeight + InspectorStyle.UnityEventTopMargin : propertyHeight;
             }
 
             EnsureExpanded(property);
@@ -978,7 +981,14 @@ namespace MyInspector.Editor
             }
             else if (IsContainer(property))
             {
-                DrawContainer(rect, property, label, flat || IsInline(property), plain);
+                var inline = !flat && IsInline(property);
+
+                if (inline)
+                {
+                    rect = new Rect(rect.x + ContainerIndent, rect.y, rect.width - ContainerIndent * 2f, rect.height);
+                }
+
+                DrawContainer(rect, property, label, flat || inline, plain);
             }
             else
             {
@@ -999,6 +1009,11 @@ namespace MyInspector.Editor
                 if (label == null && PropertyUtility.GetAttribute<LabelAttribute>(property) != null)
                 {
                     label = PropertyUtility.GetLabel(property);
+                }
+
+                if (IsUnityEvent(property))
+                {
+                    rect = new Rect(rect.x - InspectorStyle.UnityEventLeftIndent, rect.y + InspectorStyle.UnityEventTopMargin, rect.width + InspectorStyle.UnityEventLeftIndent, rect.height - InspectorStyle.UnityEventTopMargin);
                 }
 
                 if (label != null)
@@ -1082,6 +1097,31 @@ namespace MyInspector.Editor
                 || foldout != null && string.Equals(foldout.Name, property.displayName, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static readonly Dictionary<(int, string), bool> UnityEventFlags = new();
+
+        private static bool IsUnityEvent(SerializedProperty property)
+        {
+            if (property.propertyType != SerializedPropertyType.Generic || property.isArray)
+            {
+                return false;
+            }
+
+            var key = (property.serializedObject.GetHashCode(), property.propertyPath);
+
+            if (UnityEventFlags.TryGetValue(key, out var flag))
+            {
+                return flag;
+            }
+
+            var type = ResolveDeclaredType(property);
+
+            flag = property.type.StartsWith("UnityEvent", StringComparison.Ordinal)
+                   || (type != null && typeof(UnityEngine.Events.UnityEventBase).IsAssignableFrom(type));
+            UnityEventFlags[key] = flag;
+
+            return flag;
+        }
+
         /// <summary>
         /// True for serializable classes/structs without a custom drawer. They are drawn manually so that the lists they contain use this drawer.
         /// </summary>
@@ -1108,7 +1148,20 @@ namespace MyInspector.Editor
                     return cachedFlag;
                 }
 
-                type = ResolveDeclaredType(property) ?? property.boxedValue?.GetType();
+                type = ResolveDeclaredType(property);
+
+                if (type == null)
+                {
+                    try
+                    {
+                        type = property.boxedValue?.GetType();
+                    }
+                    catch (NotSupportedException)
+                    {
+                        // Built-in types such as UnityEvent cannot be read with boxedValue
+                    }
+                }
+
                 cachedFlag = IsContainerType(type);
                 ContainerFlags[key] = cachedFlag;
 
@@ -1288,6 +1341,90 @@ namespace MyInspector.Editor
             while (underHidden ? iterator.Next(false) : iterator.NextVisible(false));
         }
 
+        private static readonly Dictionary<Type, MemberInfo> FoldoutLabelMembers = new();
+
+        private static MemberInfo GetFoldoutLabelMember(Type type)
+        {
+            if (type == null)
+            {
+                return null;
+            }
+
+            if (FoldoutLabelMembers.TryGetValue(type, out var cached))
+            {
+                return cached;
+            }
+
+            MemberInfo member = null;
+            var attribute = type.GetCustomAttribute<FoldoutLabelAttribute>(true);
+
+            if (attribute != null)
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+                member = (MemberInfo) type.GetMethod(attribute.MemberName, flags, null, Type.EmptyTypes, null)
+                    ?? type.GetProperty(attribute.MemberName, flags);
+            }
+
+            FoldoutLabelMembers[type] = member;
+
+            return member;
+        }
+
+        /// <summary>Text given by the [FoldoutLabel] of the class of the property value, or null when there is none.</summary>
+        private static string GetFoldoutLabelText(SerializedProperty property)
+        {
+            if (property.propertyType != SerializedPropertyType.ManagedReference && property.propertyType != SerializedPropertyType.Generic)
+            {
+                return null;
+            }
+
+            var target = PropertyUtility.GetTargetObjectOfProperty(property);
+
+            if (target == null)
+            {
+                return null;
+            }
+
+            var member = GetFoldoutLabelMember(target.GetType());
+
+            if (member == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return (member is MethodInfo method ? method.Invoke(target, null) : ((PropertyInfo) member).GetValue(target)) as string;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static float GetFoldoutLabelExtraHeight(SerializedProperty property)
+        {
+            var text = GetFoldoutLabelText(property);
+
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0f;
+            }
+
+            var extraLines = 0;
+
+            for (var i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n')
+                {
+                    extraLines++;
+                }
+            }
+
+            return extraLines * EditorGUIUtility.singleLineHeight;
+        }
+
         private static float GetContainerHeight(SerializedProperty property, bool flat, bool plain)
         {
             if (flat)
@@ -1295,14 +1432,16 @@ namespace MyInspector.Editor
                 return GetRunsHeight(property);
             }
 
+            var extra = GetFoldoutLabelExtraHeight(property);
+
             if (plain)
             {
                 return property.isExpanded
-                    ? EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing + GetRunsHeight(property)
-                    : EditorGUIUtility.singleLineHeight;
+                    ? extra + EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing + GetRunsHeight(property)
+                    : extra + EditorGUIUtility.singleLineHeight;
             }
 
-            var headerHeight = TopPadding + HeaderHeight + HeaderPadding * 2f;
+            var headerHeight = TopPadding + HeaderHeight + HeaderPadding * 2f + extra;
 
             if (!property.isExpanded)
             {
@@ -1429,7 +1568,7 @@ namespace MyInspector.Editor
             }
         }
 
-        private static float GetFoldoutRunHeight(SerializedProperty property, FoldoutAttribute foldout, List<SerializedProperty> children)
+        public static float GetFoldoutRunHeight(SerializedProperty property, FoldoutAttribute foldout, List<SerializedProperty> children)
         {
             var height = 0f;
             var toggle = GetToggle(children);
@@ -1539,10 +1678,15 @@ namespace MyInspector.Editor
 
         private static readonly Dictionary<(int Object, string Path, string Foldout, int Flags), List<SerializedProperty>> BodyCache = new();
 
+        // Bodies of foldouts: their fields already belong to the tab drawn around the foldout, so no toolbar is drawn inside
+        private static readonly HashSet<List<SerializedProperty>> FoldoutBodies =         new();
+
         private static List<SerializedProperty> GetBody(SerializedProperty property, FoldoutAttribute foldout, List<SerializedProperty> children, SerializedProperty toggle)
         {
             if (toggle == null)
             {
+                FoldoutBodies.Add(children);
+
                 return children;
             }
 
@@ -1556,6 +1700,7 @@ namespace MyInspector.Editor
             var body = ComputeBody(property, foldout, children, toggle);
 
             BodyCache[key] = body;
+            FoldoutBodies.Add(body);
 
             return body;
         }
@@ -1622,6 +1767,13 @@ namespace MyInspector.Editor
                         continue;
                     }
 
+                    if (entry.FoldoutChildren != null)
+                    {
+                        height += GetFoldoutRunHeight(entry.Parent, entry.Foldout, entry.FoldoutChildren);
+
+                        continue;
+                    }
+
                     height += GetTitleHeight(entry.Child) + GetHeight(entry.Child) + EditorGUIUtility.standardVerticalSpacing;
                     height += (entry.BoxStart ? TabGroupUtility.BoxPaddingVertical : 0f) + (entry.BoxEnd ? TabGroupUtility.BoxPaddingVertical : 0f);
                 }
@@ -1641,6 +1793,9 @@ namespace MyInspector.Editor
         private class TabEntry
         {
             public SerializedProperty Child;
+            public FoldoutAttribute Foldout;
+            public List<SerializedProperty> FoldoutChildren;
+            public SerializedProperty Parent;
             public TabGroupUtility.TabGroup Toolbar;
             public string[] ToolbarNames;
             public bool InBox;
@@ -1659,7 +1814,7 @@ namespace MyInspector.Editor
                 return cached;
             }
 
-            var layout = ComputeTabLayout(children);
+            var layout = FoldoutBodies.Contains(children) ? NoTabs : ComputeTabLayout(children);
 
             TabLayoutCache[children] = layout;
 
@@ -1738,16 +1893,47 @@ namespace MyInspector.Editor
 
                 var labelWidth = selectedChildren.Count > 0 ? TabGroupUtility.MeasureLabelWidth(new List<SerializedProperty>(selectedChildren), 400f) : 0f;
 
-                for (var i = 0; i < selectedChildren.Count; i++)
+                RunParents.TryGetValue(children, out var parent);
+
+                var i = 0;
+
+                while (i < selectedChildren.Count)
                 {
-                    layout.Add(new TabEntry
+                    var foldout = parent != null ? PropertyUtility.GetAttribute<FoldoutAttribute>(selectedChildren[i]) : null;
+
+                    if (foldout != null)
                     {
-                        Child = selectedChildren[i],
-                        InBox = true,
-                        BoxStart = i == 0,
-                        BoxEnd = i == selectedChildren.Count - 1,
-                        LabelWidth = labelWidth
-                    });
+                        var run = new List<SerializedProperty>();
+
+                        while (i < selectedChildren.Count && PropertyUtility.GetAttribute<FoldoutAttribute>(selectedChildren[i])?.Name == foldout.Name)
+                        {
+                            run.Add(selectedChildren[i]);
+                            i++;
+                        }
+
+                        layout.Add(new TabEntry { Foldout = foldout, FoldoutChildren = run, Parent = parent });
+
+                        continue;
+                    }
+
+                    var start = i;
+
+                    while (i < selectedChildren.Count && (parent == null || PropertyUtility.GetAttribute<FoldoutAttribute>(selectedChildren[i]) == null))
+                    {
+                        i++;
+                    }
+
+                    for (var j = start; j < i; j++)
+                    {
+                        layout.Add(new TabEntry
+                        {
+                            Child = selectedChildren[j],
+                            InBox = true,
+                            BoxStart = j == start,
+                            BoxEnd = j == i - 1,
+                            LabelWidth = labelWidth
+                        });
+                    }
                 }
             }
 
@@ -1777,6 +1963,13 @@ namespace MyInspector.Editor
 
                         return;
                     }
+
+                    continue;
+                }
+
+                if (entry.FoldoutChildren != null)
+                {
+                    DrawFoldoutRun(rect, entry.Parent, entry.Foldout, entry.FoldoutChildren, ref y);
 
                     continue;
                 }
@@ -1872,6 +2065,8 @@ namespace MyInspector.Editor
             return runs;
         }
 
+        private static readonly Dictionary<List<SerializedProperty>, SerializedProperty> RunParents = new();
+
         private static List<(FoldoutAttribute Foldout, List<SerializedProperty> Children)> ComputeRuns(SerializedProperty property)
         {
             var runs = new List<(FoldoutAttribute Foldout, List<SerializedProperty> Children)>();
@@ -1882,7 +2077,7 @@ namespace MyInspector.Editor
 
             foreach (var child in GetChildren(property))
             {
-                var isTab = PropertyUtility.GetAttribute<TabAttribute>(child) != null && PropertyUtility.GetAttribute<FoldoutAttribute>(child) == null;
+                var isTab = PropertyUtility.GetAttribute<TabAttribute>(child) != null;
 
                 if (!isTab)
                 {
@@ -1902,7 +2097,8 @@ namespace MyInspector.Editor
 
             foreach (var child in ordered)
             {
-                var foldout = PropertyUtility.GetAttribute<FoldoutAttribute>(child);
+                // Tabbed fields stay in the tab run; their [Foldout] is resolved inside the selected tab
+                var foldout = PropertyUtility.GetAttribute<TabAttribute>(child) != null ? null : PropertyUtility.GetAttribute<FoldoutAttribute>(child);
 
                 if (runs.Count > 0 && runs[runs.Count - 1].Foldout?.Name == foldout?.Name && (foldout != null || runs[runs.Count - 1].Foldout == null))
                 {
@@ -1910,7 +2106,10 @@ namespace MyInspector.Editor
                 }
                 else
                 {
-                    runs.Add((foldout, new List<SerializedProperty> { child }));
+                    var list = new List<SerializedProperty> { child };
+
+                    runs.Add((foldout, list));
+                    RunParents[list] = property;
                 }
             }
 
@@ -2042,10 +2241,12 @@ namespace MyInspector.Editor
             open = EditorGUI.Foldout(new Rect(rect.x, rect.y, arrowWidth, rect.height), open, GUIContent.none, true);
 
             EditorGUI.BeginProperty(rect, content, toggle);
+            var wasEnabled = toggle.boolValue;
+
             toggle.boolValue = EditorGUI.ToggleLeft(new Rect(rect.x + arrowWidth, rect.y, rect.width - arrowWidth, rect.height), content, toggle.boolValue, bold ? EditorStyles.boldLabel : EditorStyles.label);
             EditorGUI.EndProperty();
 
-            return open;
+            return wasEnabled != toggle.boolValue ? toggle.boolValue : open;
         }
 
         private static void DrawBody(Rect rect, List<SerializedProperty> body, SerializedProperty toggle, ref float y)
@@ -2101,7 +2302,7 @@ namespace MyInspector.Editor
             Event.current.Use();
         }
 
-        private static void DrawFoldoutRun(Rect rect, SerializedProperty property, FoldoutAttribute foldout, List<SerializedProperty> children, ref float y)
+        public static void DrawFoldoutRun(Rect rect, SerializedProperty property, FoldoutAttribute foldout, List<SerializedProperty> children, ref float y)
         {
             var key = GetFoldoutKey(property, foldout.Name);
             var open = SessionState.GetBool(key, false);
@@ -2163,10 +2364,17 @@ namespace MyInspector.Editor
         private static void DrawContainer(Rect rect, SerializedProperty property, GUIContent label, bool flat, bool plain)
         {
             var y = rect.y;
+            var customLabel = flat ? null : GetFoldoutLabelText(property);
+            var extraHeight = string.IsNullOrEmpty(customLabel) ? 0f : GetFoldoutLabelExtraHeight(property);
+
+            if (!string.IsNullOrEmpty(customLabel))
+            {
+                label = new GUIContent(customLabel);
+            }
 
             if (plain && !flat)
             {
-                var line = new Rect(rect.x + 16f, rect.y, rect.width - 16f, EditorGUIUtility.singleLineHeight);
+                var line = new Rect(rect.x + 16f, rect.y, rect.width - 16f, EditorGUIUtility.singleLineHeight + extraHeight);
 
                 HandleContainerContextClick(line, property);
                 property.isExpanded = EditorGUI.Foldout(line, property.isExpanded, label ?? PropertyUtility.GetLabel(property), true);
@@ -2202,11 +2410,11 @@ namespace MyInspector.Editor
                 rect.y += TopPadding;
                 rect.height -= TopPadding;
 
-                var header = new Rect(rect.x, rect.y, rect.width, HeaderHeight + HeaderPadding * 2f);
+                var header = new Rect(rect.x, rect.y, rect.width, HeaderHeight + HeaderPadding * 2f + extraHeight);
 
                 EditorGUI.DrawRect(header, InspectorStyle.HeaderBackground);
 
-                var line = new Rect(header.x + 18f, header.y + HeaderPadding + (HeaderHeight - EditorGUIUtility.singleLineHeight) * 0.5f, header.width - 18f, EditorGUIUtility.singleLineHeight);
+                var line = new Rect(header.x + 18f, header.y + HeaderPadding + (HeaderHeight - EditorGUIUtility.singleLineHeight) * 0.5f, header.width - 18f, EditorGUIUtility.singleLineHeight + extraHeight);
 
                                 HandleContainerContextClick(header, property);
                                 property.isExpanded = EditorGUI.Foldout(line, property.isExpanded, label ?? PropertyUtility.GetLabel(property), true);
@@ -2600,6 +2808,8 @@ namespace MyInspector.Editor
         {
             var serializedObject = array.serializedObject;
 
+            ExpandForAdd(array);
+
             if (settings != null && !string.IsNullOrEmpty(settings.CustomAddFunction))
             {
                 var owner = PropertyUtility.GetTargetObjectWithProperty(array);
@@ -2625,7 +2835,7 @@ namespace MyInspector.Editor
 
                 if (referenceField == null || GetTypes(referenceField.FieldType).Count <= 1)
                 {
-                    array.arraySize++;
+                    AddDefaultElement(array, elementType);
                     GUI.changed = true;
 
                     return;
@@ -2639,7 +2849,7 @@ namespace MyInspector.Editor
 
                     var list = serializedObject.FindProperty(arrayPath);
 
-                    list.arraySize++;
+                    AddDefaultElement(list, elementType);
                     list.GetArrayElementAtIndex(list.arraySize - 1).FindPropertyRelative(referenceField.Name).managedReferenceValue = Activator.CreateInstance(type);
                     serializedObject.ApplyModifiedProperties();
                 });
@@ -2664,6 +2874,77 @@ namespace MyInspector.Editor
                 AddReference(serializedObject.FindProperty(path), type);
                 serializedObject.ApplyModifiedProperties();
             });
+        }
+
+        // Opens the collapsed list/dictionary and the [Foldout] group holding it so a newly added entry is visible
+        private static void ExpandForAdd(SerializedProperty property)
+        {
+            property.isExpanded = true;
+
+            var foldout = PropertyUtility.GetAttribute<FoldoutAttribute>(property);
+            var path = property.propertyPath;
+            var lastDot = path.LastIndexOf('.');
+
+            if (foldout == null)
+            {
+                return;
+            }
+
+            var containerPath = lastDot < 0 ? string.Empty : path.Substring(0, lastDot);
+
+            MyInspector.OpenFoldout(property.serializedObject.targetObject, containerPath, foldout.Name);
+
+            var parent = lastDot < 0 ? null : property.serializedObject.FindProperty(containerPath);
+
+            if (parent != null)
+            {
+                SessionState.SetBool(GetFoldoutKey(parent, foldout.Name), true);
+            }
+        }
+
+        // Unity copies the last element when growing an array; this appends a fresh default element instead
+        private static void AddDefaultElement(SerializedProperty array, Type elementType)
+        {
+            array.arraySize++;
+
+            var element = array.GetArrayElementAtIndex(array.arraySize - 1);
+
+            switch (element.propertyType)
+            {
+                case SerializedPropertyType.Generic:
+                    if (elementType != null && !elementType.IsAbstract && !elementType.IsArray
+                        && (elementType.IsValueType || elementType.GetConstructor(Type.EmptyTypes) != null))
+                    {
+                        element.boxedValue = Activator.CreateInstance(elementType);
+                    }
+
+                    break;
+                case SerializedPropertyType.Integer:
+                case SerializedPropertyType.Enum:
+                    element.intValue = 0;
+
+                    break;
+                case SerializedPropertyType.Float:
+                    element.floatValue = 0f;
+
+                    break;
+                case SerializedPropertyType.Boolean:
+                    element.boolValue = false;
+
+                    break;
+                case SerializedPropertyType.String:
+                    element.stringValue = string.Empty;
+
+                    break;
+                case SerializedPropertyType.ObjectReference:
+                    element.objectReferenceValue = null;
+
+                    break;
+                case SerializedPropertyType.ManagedReference:
+                    element.managedReferenceValue = null;
+
+                    break;
+            }
         }
 
         // First [SerializeReference] field of a plain serializable element, used to ask for its type when adding

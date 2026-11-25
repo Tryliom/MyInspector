@@ -67,8 +67,37 @@ namespace MyInspector.Editor
         private Dictionary<string, UnityEditorInternal.ReorderableList> _lists = new Dictionary<string, UnityEditorInternal.ReorderableList>();
         private Dictionary<string, SavedBool> _listFoldouts = new Dictionary<string, SavedBool>();
 
+        private static readonly List<MyInspector> LiveInspectors = new List<MyInspector>();
+
+        // Opens a [Foldout] group drawn by a live inspector (used when an element is added to a list inside it)
+        internal static void OpenFoldout(UnityEngine.Object owner, string containerPath, string foldoutName)
+        {
+            var name = string.IsNullOrEmpty(containerPath) ? foldoutName : containerPath + "." + foldoutName;
+
+            foreach (var inspector in LiveInspectors)
+            {
+                if (inspector == null || inspector.target != owner)
+                {
+                    continue;
+                }
+
+                if (!inspector._foldouts.TryGetValue(name, out var saved))
+                {
+                    saved = new SavedBool($"MyInspector.Foldout.{owner.GetType().FullName}.{name}", false);
+                    inspector._foldouts[name] = saved;
+                }
+
+                saved.Value = true;
+            }
+        }
+
         protected virtual void OnEnable()
         {
+            if (!LiveInspectors.Contains(this))
+            {
+                LiveInspectors.Add(this);
+            }
+
             _nonSerializedFields = ReflectionUtility.GetAllFields(
                 target, f => f.GetCustomAttributes(typeof(ShowNonSerializedFieldAttribute), true).Length > 0).ToList();
 
@@ -155,6 +184,7 @@ namespace MyInspector.Editor
 
         protected virtual void OnDisable()
         {
+            LiveInspectors.Remove(this);
             ReorderableListPropertyDrawer.Instance.ClearCache();
         }
 
@@ -668,12 +698,17 @@ namespace MyInspector.Editor
             var tabItems = new List<Item>(visible.Count);
             var tabProperties = new List<SerializedProperty>(visible.Count);
 
-            foreach (var item in visible)
+            // Hidden items stay in the tab: a BoolTitle foldout reveals them (greyed out) when its toggle is off, and DrawItem still skips them otherwise
+            foreach (var item in run)
             {
                 if (item.Tab.Name == group.SelectedName)
                 {
                     tabItems.Add(item);
-                    tabProperties.Add(item.Property);
+
+                    if (visible.Contains(item))
+                    {
+                        tabProperties.Add(item.Property);
+                    }
                 }
             }
 
@@ -776,8 +811,15 @@ namespace MyInspector.Editor
                     var titleStyle = GetBoolTitleStyle();
 
                     EditorGUI.BeginProperty(rect, content, first);
+                    var wasEnabled = first.boolValue;
+
                     first.boolValue = EditorGUI.ToggleLeft(new Rect(rect.x + InspectorStyle.BoolTitleToggleOffset, rect.y, rect.width - InspectorStyle.BoolTitleToggleOffset, rect.height), content, first.boolValue, titleStyle);
                     EditorGUI.EndProperty();
+
+                    if (wasEnabled != first.boolValue)
+                    {
+                        _foldouts[name].Value = first.boolValue;
+                    }
 
                     if (_foldouts[name].Value)
                     {
