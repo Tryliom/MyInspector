@@ -17,13 +17,6 @@ public class EnumTitleAttributeDrawer : PropertyDrawer
 
 	public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
 	{
-		if (property.propertyType != SerializedPropertyType.Enum || fieldInfo == null)
-		{
-			EditorGUI.PropertyField(position, property, label);
-
-			return;
-		}
-
 		// Manual rects ignore the indent, so apply it once and draw with a zero indent level
 		var previousIndent = EditorGUI.indentLevel;
 
@@ -40,16 +33,26 @@ public class EnumTitleAttributeDrawer : PropertyDrawer
 		var attribute = (EnumTitleAttribute) this.attribute;
 		var content = new GUIContent(attribute.Title ?? label.text, label.tooltip);
 		var row = new Rect(position.x, position.y + TopSpace, position.width, RowHeight);
-		var current = (Enum) Enum.ToObject(fieldInfo.FieldType, property.intValue);
 
 		EditorGUI.BeginProperty(position, content, property);
-		EditorGUI.BeginChangeCheck();
 
-		var result = EnumDrawerUtils.TitleRow(row, content, current);
-
-		if (EditorGUI.EndChangeCheck())
+		if (property.propertyType == SerializedPropertyType.Enum && fieldInfo != null)
 		{
-			property.intValue = Convert.ToInt32(result);
+			var current = (Enum) Enum.ToObject(fieldInfo.FieldType, property.intValue);
+
+			EditorGUI.BeginChangeCheck();
+
+			var result = EnumDrawerUtils.TitleRow(row, content, current);
+
+			if (EditorGUI.EndChangeCheck())
+			{
+				property.intValue = Convert.ToInt32(result);
+			}
+		}
+		else
+		{
+			// Enum-like types (e.g. string based ids) keep their own drawer, without its label
+			EditorGUI.PropertyField(EnumDrawerUtils.TitleLabel(row, content), property, GUIContent.none);
 		}
 
 		EditorGUI.EndProperty();

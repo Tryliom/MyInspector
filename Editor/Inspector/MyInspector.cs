@@ -1522,14 +1522,13 @@ namespace MyInspector.Editor
         {
             foreach (var changed in field.GetCustomAttributes<OnValueChangedAttribute>(true))
             {
-                var callback = target.GetType().GetMethod(
-                    changed.CallbackName,
-                    BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    Type.EmptyTypes,
-                    null);
+                // Type.GetMethod skips private methods declared on base classes, so walk the hierarchy.
+                var callback = ReflectionUtility.GetMethod(target, changed.CallbackName);
 
-                callback?.Invoke(target, null);
+                if (callback != null && callback.GetParameters().Length == 0)
+                {
+                    callback.Invoke(target, null);
+                }
             }
         }
 

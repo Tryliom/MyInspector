@@ -88,6 +88,8 @@ namespace MyInspector.Editor
         public const float TableRowButtonWidth = 22f;
         public const float TableRowPadding = 3f;
         public const float TableMinColumnWidth = 60f;
+        public const float TableViewMargin = 40f;
+        public const float TableFillMaxWidth = 100000f;
         public const float TableNestedLabelWidth = 70f;
         public const float TableCellSidePadding = 2f;
         public const float TableCellRightPadding = 8f;

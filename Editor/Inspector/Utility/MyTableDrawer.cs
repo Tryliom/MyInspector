@@ -1147,7 +1147,9 @@ namespace MyInspector.Editor
         {
             if (column.FillRest)
             {
-                return new[] { GUILayout.MinWidth(column.ComputedWidth), GUILayout.ExpandWidth(true) };
+                // The minimum must stay small: a minimum equal to the computed width can widen the table,
+                // which raises the available width on the next repaint and makes it grow forever.
+                return new[] { GUILayout.MinWidth(MinColumnWidth * 0.5f), GUILayout.MaxWidth(InspectorStyle.TableFillMaxWidth), GUILayout.ExpandWidth(true) };
             }
 
             return new[] { GUILayout.Width(column.ComputedWidth), GUILayout.ExpandWidth(false) };
@@ -1156,7 +1158,9 @@ namespace MyInspector.Editor
         /// <summary>Gives every column an explicit width so the header and the rows always line up.</summary>
         private static void ComputeWidths(List<Column> columns, bool canEdit)
         {
-            var available = _lastWidth > 1f ? _lastWidth : EditorGUIUtility.currentViewWidth - 40f;
+            // Never exceed the view width, so an overflowing table cannot feed its own width back.
+            var viewWidth = EditorGUIUtility.currentViewWidth - InspectorStyle.TableViewMargin;
+            var available = _lastWidth > 1f ? Mathf.Min(_lastWidth, viewWidth) : viewWidth;
             var spacing = columns.Count * 4f + 10f + (canEdit ? RowButtonWidth : 0f);
             var total = spacing;
             var autoCount = 0;
