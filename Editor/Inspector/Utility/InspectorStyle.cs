@@ -101,6 +101,9 @@ namespace MyInspector.Editor
         public const float BoxHeaderHeight = 26f;
         public const float DisplayAsStringHorizontalMargin = 40f;
 
+        // ---- Button arguments ----
+        public const float ButtonParameterPadding = 4f;
+
         // ---- Title drawers ----
         public const float TitleLineHeight = 1f;
         public const float TitlePadding = 4f;

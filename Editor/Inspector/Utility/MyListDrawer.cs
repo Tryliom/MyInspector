@@ -1500,19 +1500,7 @@ namespace MyInspector.Editor
                     continue;
                 }
 
-                var valid = true;
-
-                foreach (var parameter in method.GetParameters())
-                {
-                    if (!parameter.IsOptional)
-                    {
-                        valid = false;
-
-                        break;
-                    }
-                }
-
-                if (valid)
+                if (ButtonParameterDrawer.IsInvokable(method))
                 {
                     buttons.Add(method);
                 }
@@ -1525,9 +1513,24 @@ namespace MyInspector.Editor
 
         private static float GetLooseButtonsHeight(SerializedProperty property)
         {
-            var buttons = GetLooseButtons(property);
+            return GetButtonListHeight(GetLooseButtons(property));
+        }
 
-            return buttons == null ? 0f : buttons.Count * (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
+        private static float GetButtonListHeight(List<System.Reflection.MethodInfo> buttons)
+        {
+            if (buttons == null)
+            {
+                return 0f;
+            }
+
+            var height = 0f;
+
+            for (var i = 0; i < buttons.Count; i++)
+            {
+                height += ButtonParameterDrawer.GetHeight(buttons[i]) + EditorGUIUtility.standardVerticalSpacing;
+            }
+
+            return height;
         }
 
         private static void DrawLooseButtons(Rect rect, SerializedProperty property, ref float y)
@@ -1546,16 +1549,12 @@ namespace MyInspector.Editor
                 var attribute = (ButtonAttribute)method.GetCustomAttributes(typeof(ButtonAttribute), true)[0];
                 var text = string.IsNullOrEmpty(attribute.Text) ? ObjectNames.NicifyVariableName(method.Name) : attribute.Text;
 
-                if (GUI.Button(new Rect(rect.x, y, rect.width, EditorGUIUtility.singleLineHeight), text))
+                var height = ButtonParameterDrawer.GetHeight(method);
+                var path = ButtonParameterDrawer.HasEditableParameters(method) ? property.propertyPath : string.Empty;
+
+                if (ButtonParameterDrawer.Draw(new Rect(rect.x, y, rect.width, height), method, property.serializedObject.targetObject, path, text, out var arguments))
                 {
                     var serializedObject = property.serializedObject;
-                    var parameters = method.GetParameters();
-                    var arguments = new object[parameters.Length];
-
-                    for (var i = 0; i < parameters.Length; i++)
-                    {
-                        arguments[i] = parameters[i].DefaultValue;
-                    }
 
                     serializedObject.ApplyModifiedProperties();
                     method.Invoke(target, arguments);
@@ -1564,7 +1563,7 @@ namespace MyInspector.Editor
                     GUIUtility.ExitGUI();
                 }
 
-                y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+                y += height + EditorGUIUtility.standardVerticalSpacing;
             }
         }
 
@@ -1620,7 +1619,7 @@ namespace MyInspector.Editor
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
             var buttons = target.GetType().GetMethods(flags)
                 .Where(m => m.GetCustomAttributes(typeof(ButtonAttribute), true).Length > 0
-                    && m.GetParameters().All(p => p.IsOptional)
+                    && ButtonParameterDrawer.IsInvokable(m)
                     && m.GetCustomAttributes(typeof(FoldoutAttribute), true).Cast<FoldoutAttribute>().Any(f => f.Name == foldout.Name))
                 .ToList();
 
@@ -1631,9 +1630,7 @@ namespace MyInspector.Editor
 
         private static float GetButtonsHeight(SerializedProperty property, FoldoutAttribute foldout)
         {
-            var buttons = GetButtons(property, foldout);
-
-            return buttons == null ? 0f : buttons.Count * (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
+            return GetButtonListHeight(GetButtons(property, foldout));
         }
 
         private static void DrawButtons(Rect rect, SerializedProperty property, FoldoutAttribute foldout, ref float y)
@@ -1652,12 +1649,15 @@ namespace MyInspector.Editor
                 var attribute = (ButtonAttribute)method.GetCustomAttributes(typeof(ButtonAttribute), true)[0];
                 var text = string.IsNullOrEmpty(attribute.Text) ? ObjectNames.NicifyVariableName(method.Name) : attribute.Text;
 
-                if (GUI.Button(new Rect(rect.x, y, rect.width, EditorGUIUtility.singleLineHeight), text))
+                var height = ButtonParameterDrawer.GetHeight(method);
+                var path = ButtonParameterDrawer.HasEditableParameters(method) ? property.propertyPath : string.Empty;
+
+                if (ButtonParameterDrawer.Draw(new Rect(rect.x, y, rect.width, height), method, property.serializedObject.targetObject, path, text, out var arguments))
                 {
-                    method.Invoke(target, method.GetParameters().Select(p => p.DefaultValue).ToArray());
+                    method.Invoke(target, arguments);
                 }
 
-                y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+                y += height + EditorGUIUtility.standardVerticalSpacing;
             }
         }
 

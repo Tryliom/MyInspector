@@ -34,19 +34,7 @@ public class InlinePropertyDrawer : PropertyDrawer
 				continue;
 			}
 
-			var valid = true;
-
-			foreach (var parameter in method.GetParameters())
-			{
-				if (!parameter.IsOptional)
-				{
-					valid = false;
-
-					break;
-				}
-			}
-
-			if (valid)
+			if (ButtonParameterDrawer.IsInvokable(method))
 			{
 				buttons.Add(method);
 			}
@@ -91,7 +79,10 @@ public class InlinePropertyDrawer : PropertyDrawer
 
 		if (buttons != null)
 		{
-			height += buttons.Count * (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
+			foreach (var method in buttons)
+			{
+				height += ButtonParameterDrawer.GetHeight(method) + EditorGUIUtility.standardVerticalSpacing;
+			}
 		}
 
 		return Mathf.Max(height - EditorGUIUtility.standardVerticalSpacing, EditorGUIUtility.singleLineHeight);
@@ -137,25 +128,19 @@ public class InlinePropertyDrawer : PropertyDrawer
 		{
 			var buttonAttribute = (ButtonAttribute)method.GetCustomAttributes(typeof(ButtonAttribute), true)[0];
 			var text = string.IsNullOrEmpty(buttonAttribute.Text) ? ObjectNames.NicifyVariableName(method.Name) : buttonAttribute.Text;
-			var buttonRect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+			var buttonHeight = ButtonParameterDrawer.GetHeight(method);
+			var buttonRect = new Rect(position.x, position.y, position.width, buttonHeight);
+			var path = ButtonParameterDrawer.HasEditableParameters(method) ? property.propertyPath : string.Empty;
 
-			if (GUI.Button(buttonRect, text))
+			if (ButtonParameterDrawer.Draw(buttonRect, method, property.serializedObject.targetObject, path, text, out var args))
 			{
-				var parameters = method.GetParameters();
-				var args = new object[parameters.Length];
-
-				for (var i = 0; i < parameters.Length; i++)
-				{
-					args[i] = parameters[i].DefaultValue;
-				}
-
 				property.serializedObject.ApplyModifiedProperties();
 				method.Invoke(target, args);
 				property.serializedObject.Update();
 				EditorUtility.SetDirty(property.serializedObject.targetObject);
 			}
 
-			position.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+			position.y += buttonHeight + EditorGUIUtility.standardVerticalSpacing;
 		}
 	}
 }

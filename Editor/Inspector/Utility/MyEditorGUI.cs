@@ -142,7 +142,7 @@ namespace MyInspector.Editor
                 return;
             }
 
-            if (methodInfo.GetParameters().All(p => p.IsOptional))
+            if (ButtonParameterDrawer.IsInvokable(methodInfo))
             {
                 ButtonAttribute buttonAttribute = (ButtonAttribute)methodInfo.GetCustomAttributes(typeof(ButtonAttribute), true)[0];
                 string buttonText = string.IsNullOrEmpty(buttonAttribute.Text) ? ObjectNames.NicifyVariableName(methodInfo.Name) : buttonAttribute.Text;
@@ -163,9 +163,8 @@ namespace MyInspector.Editor
 
                 EditorGUI.BeginDisabledGroup(!buttonEnabled);
 
-                if (GUILayout.Button(buttonText, _buttonStyle))
+                if (ButtonParameterDrawer.Draw_Layout(methodInfo, target, string.Empty, buttonText, out var arguments, _buttonStyle))
                 {
-                    object[] defaultParams = methodInfo.GetParameters().Select(p => p.DefaultValue).ToArray();
                     Type targetType = target.GetType();
                     List<UnityEngine.Object> targets = new List<UnityEngine.Object>();
 
@@ -197,7 +196,7 @@ namespace MyInspector.Editor
 
                     foreach (UnityEngine.Object t in targets)
                     {
-                        IEnumerator methodResult = methodInfo.Invoke(t, defaultParams) as IEnumerator;
+                        IEnumerator methodResult = methodInfo.Invoke(t, arguments) as IEnumerator;
 
                         if (!Application.isPlaying)
                         {
@@ -227,7 +226,7 @@ namespace MyInspector.Editor
             }
             else
             {
-                string warning = typeof(ButtonAttribute).Name + " works only on methods with no parameters";
+                string warning = typeof(ButtonAttribute).Name + $" on {methodInfo.Name}: every parameter must have a supported type or a default value";
                 HelpBox_Layout(warning, MessageType.Warning, context: target, logToConsole: true);
             }
         }

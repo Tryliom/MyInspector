@@ -1611,16 +1611,17 @@ namespace MyInspector.Editor
                 {
                     var button = method.GetCustomAttribute<ButtonAttribute>(true);
 
-                    if (button == null || !method.GetParameters().All(p => p.IsOptional))
+                    if (button == null || !ButtonParameterDrawer.IsInvokable(method))
                     {
                         continue;
                     }
 
                     var text = string.IsNullOrEmpty(button.Text) ? ObjectNames.NicifyVariableName(method.Name) : button.Text;
+                    var path = ButtonParameterDrawer.HasEditableParameters(method) ? $"{key}[{i}]" : string.Empty;
 
-                    if (GUILayout.Button(text))
+                    if (ButtonParameterDrawer.Draw_Layout(method, target, path, text, out var arguments))
                     {
-                        method.Invoke(element, method.GetParameters().Select(p => p.DefaultValue).ToArray());
+                        method.Invoke(element, arguments);
                     }
                 }
 

@@ -591,9 +591,12 @@ namespace MyInspector.Editor
             {
                 var text = string.IsNullOrEmpty(member.ButtonText) ? member.Title : member.ButtonText;
 
-                if (GUILayout.Button(text))
+                var keyOwner = _elementProperty != null ? _owner : element;
+                var keyPath = _elementProperty != null && ButtonParameterDrawer.HasEditableParameters(member.Method) ? _elementProperty.propertyPath : string.Empty;
+
+                if (ButtonParameterDrawer.Draw_Layout(member.Method, keyOwner, keyPath, text, out var arguments))
                 {
-                    member.Method.Invoke(element, member.Method.GetParameters().Select(p => p.DefaultValue).ToArray());
+                    member.Method.Invoke(element, arguments);
                 }
 
                 return false;
@@ -1102,7 +1105,7 @@ namespace MyInspector.Editor
                 {
                     var button = method.GetCustomAttribute<ButtonAttribute>(true);
 
-                    if (button == null || !method.GetParameters().All(p => p.IsOptional))
+                    if (button == null || !ButtonParameterDrawer.IsInvokable(method))
                     {
                         continue;
                     }
