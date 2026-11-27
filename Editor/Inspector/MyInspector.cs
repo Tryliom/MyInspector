@@ -1275,6 +1275,7 @@ namespace MyInspector.Editor
             PropertyUtility.ForceVisible = false;
             EditorGUI.indentLevel++;
             DrawLevel(items, 0);
+            DrawNestedButtons(property);
             EditorGUI.indentLevel--;
             PropertyUtility.ForceVisible = previousForceVisible;
 
@@ -1337,10 +1338,53 @@ namespace MyInspector.Editor
 
             PropertyUtility.ForceVisible = false;
             DrawLevel(items, 0);
+            DrawNestedButtons(property);
             PropertyUtility.ForceVisible = previousForceVisible;
             EditorGUILayout.EndVertical();
 
             _foldoutPrefix = previousPrefix;
+        }
+
+        // [Button] methods declared on a nested class are drawn after its fields
+        private void DrawNestedButtons(SerializedProperty property)
+        {
+            var owner = PropertyUtility.GetTargetObjectOfProperty(property);
+
+            if (owner == null)
+            {
+                return;
+            }
+
+            var buttons = InlinePropertyDrawer.GetButtons(owner.GetType());
+
+            for (var i = 0; i < buttons.Count; i++)
+            {
+                var method = buttons[i];
+                var button = AttributeCache.Get<ButtonAttribute>(method);
+                var text = string.IsNullOrEmpty(button.Text) ? ObjectNames.NicifyVariableName(method.Name) : button.Text;
+                var path = ButtonParameterDrawer.HasEditableParameters(method) ? property.propertyPath : string.Empty;
+                var rect = EditorGUI.IndentedRect(EditorGUILayout.GetControlRect(false, ButtonParameterDrawer.GetHeight(method)));
+
+                // The rect is already indented, so argument fields must not be indented a second time
+                var previousIndent = EditorGUI.indentLevel;
+
+                EditorGUI.indentLevel = 0;
+
+                var clicked = ButtonParameterDrawer.Draw(rect, method, target, path, text, out var arguments);
+
+                EditorGUI.indentLevel = previousIndent;
+
+                if (!clicked)
+                {
+                    continue;
+                }
+
+                serializedObject.ApplyModifiedProperties();
+                Undo.RecordObject(target, text);
+                method.Invoke(owner, arguments);
+                EditorUtility.SetDirty(target);
+                serializedObject.Update();
+            }
         }
 
         private void DrawNullReference(SerializedProperty property, Type baseType)

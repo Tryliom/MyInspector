@@ -17,7 +17,7 @@ public class InlinePropertyDrawer : PropertyDrawer
 	private static readonly System.Collections.Generic.Dictionary<Type, System.Collections.Generic.List<System.Reflection.MethodInfo>> ButtonCache = new();
 
 	// [Button] methods declared on the inlined type are drawn after its fields
-	private static System.Collections.Generic.List<System.Reflection.MethodInfo> GetButtons(Type type)
+	internal static System.Collections.Generic.List<System.Reflection.MethodInfo> GetButtons(Type type)
 	{
 		if (ButtonCache.TryGetValue(type, out var cached))
 		{
